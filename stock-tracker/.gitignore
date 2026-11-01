@@ -8,3 +8,4 @@ config.yaml.tmp
 *.db-shm
 *.csv
 __pycache__/
+.venv/

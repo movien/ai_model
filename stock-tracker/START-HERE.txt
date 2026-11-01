@@ -1,0 +1,55 @@
+STOCK TRACKER - QUICK START
+===========================
+
+Watches products (like the RTX 5090) at stores you choose and alerts you when
+they come back in stock or the price drops. You control it from a page in your
+web browser.
+
+
+1. INSTALL PYTHON (one time)
+
+   You need Python 3.9 or newer.
+   Windows:  https://www.python.org/downloads/
+             In the installer, TICK "Add python.exe to PATH".
+   Mac:      https://www.python.org/downloads/   (or: brew install python)
+   Linux:    usually already installed. If not: sudo apt install python3 python3-venv
+
+
+2. START IT
+
+   Windows:  double-click  start-windows.bat
+   Mac:      double-click  start-mac.command
+             (first time, if macOS blocks it: right-click it > Open > Open)
+   Linux:    run  ./start.sh  in a terminal
+
+   The first start takes about a minute while it sets itself up. Then the
+   dashboard opens in your browser at http://127.0.0.1:8765
+
+   KEEP THE TERMINAL WINDOW OPEN. While it's open, the tracker is running.
+   Closing it stops tracking.
+
+
+3. SET IT UP (in the browser page)
+
+   - Your RTX 5090 is already there with 4 Micro Center cards (Phoenix store)
+     and Best Buy's Founders Edition.
+   - Flip the "Paused" switch to "Watching" to start automatic checks.
+   - "+ Listing" on a product adds another store: paste the product page link
+     and click "Test page" first to see if the tracker can read it.
+   - "+ Product" tracks something new.
+   - Settings tab: pick your refresh rate and set up phone alerts.
+     Phone push (ntfy) is free: install the "ntfy" app, pick a topic name,
+     type the same name in Settings, then click "Send test alert".
+
+
+4. GOOD TO KNOW
+
+   - "Blocked" means that store refuses automated checks (common for big
+     stores from some networks). The tracker won't try to get around it.
+     Track the product at another store instead.
+   - Best Buy needs a free API key from https://developer.bestbuy.com
+     (set it as the BESTBUY_API_KEY environment variable).
+   - Stop: close the terminal window, or press Ctrl+C in it.
+   - Your settings live in config.yaml and price history in tracker.db,
+     both in this folder.
+   - Full manual: README.md

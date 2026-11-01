@@ -19,11 +19,28 @@ drops. It was set up for the **NVIDIA RTX 5090**, but it works for any product.
 
 ## Setup
 
-Python 3.10 or newer.
+You need **Python 3.9 or newer** ([python.org/downloads](https://www.python.org/downloads/); on
+Windows, tick "Add python.exe to PATH" in the installer).
+
+**Easiest: double-click a launcher.** It sets everything up on first run (a private `.venv` folder
+with the three packages) and opens the dashboard:
+
+| System  | Start with |
+|---------|------------|
+| Windows | `start-windows.bat` |
+| macOS   | `start-mac.command` (first time: right-click, then **Open**) |
+| Linux   | `./start.sh` |
+
+Keep the terminal window open while you want tracking to run. See [`START-HERE.txt`](START-HERE.txt)
+for a step-by-step guide.
+
+**Or by hand:**
 
 ```bash
 cd stock-tracker
 pip install -r requirements.txt
+python tracker.py gui         # dashboard (creates config.yaml on first run)
+# or the command line:
 python tracker.py init        # creates config.yaml with an RTX 5090 starter entry
 python tracker.py list
 ```
