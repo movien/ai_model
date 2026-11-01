@@ -11,6 +11,8 @@ drops. It was set up for the **NVIDIA RTX 5090**, but it works for any product.
   price, a max price (to skip scalper listings) and price drops, plus history and CSV export.
 - **Alerts** in the terminal, as phone push notifications (ntfy), or via Discord, Telegram, email,
   a desktop popup, or any webhook.
+- **Web dashboard (GUI).** `python tracker.py gui` opens a dashboard in your browser with live
+  status, price charts, and forms for everything below. No command line needed after that.
 - **Polite to sites.** It waits between requests to the same site, backs off after errors, and
   respects `Retry-After`. It **doesn't try to get past bot protection.** A site that blocks
   automated checks shows up as `BLOCKED` (see [Bot protection](#bot-protection)).
@@ -26,8 +28,38 @@ python tracker.py init        # creates config.yaml with an RTX 5090 starter ent
 python tracker.py list
 ```
 
-`config.yaml` is your file. CLI commands edit it, you can edit it by hand, and a running tracker
-reloads it automatically. All options are documented in [`config.example.yaml`](config.example.yaml).
+`config.yaml` is your file. The GUI and CLI commands edit it, you can edit it by hand, and a running
+tracker reloads it automatically. All options are documented in [`config.example.yaml`](config.example.yaml).
+
+## The GUI
+
+```bash
+python tracker.py gui
+```
+
+This opens <http://127.0.0.1:8765> in your browser. Keep the terminal window open: while the GUI
+runs, it's also the tracker, so don't run `python tracker.py run` at the same time.
+
+![Dashboard](docs/gui-dashboard.png)
+
+- **Dashboard:** every product with its listings, their status (in stock, sold out, blocked),
+  price and recent change, a sparkline, and when each was checked and is next due. A summary shows the
+  best in-stock price. The chart button opens price history for all of a product's stores, with
+  your target and max price marked.
+- **Watching switch:** turns automatic checking on or off. **Check all** (or the refresh button on a
+  product or listing) checks right away, even when paused.
+- **Add or edit** products (target price, max price, refresh rate, pause) and listings (URL,
+  retailer, Micro Center store, label, refresh rate). **Test page** shows what the tracker can read
+  from a URL before you save it.
+- **Alerts & activity:** every alert, plus the checks run this session. New alerts also pop up on
+  the page and play a sound, and can show as desktop notifications if you allow them in **Settings**.
+- **Retailers:** built-in and your own, with domains, page selectors, API settings and a default store.
+- **Settings:** default refresh rate and politeness settings, and every notification channel, with a
+  **Send test alert** button.
+
+Options: `--port 8800`, `--no-browser`, `--paused` (start with checking off), `-q` (quieter terminal).
+The page is only reachable from your own computer (127.0.0.1), and each launch uses a random access
+key built into the page, so other websites can't control it.
 
 ## Quick start: RTX 5090
 
@@ -291,6 +323,7 @@ up within a few seconds.
 
 | Command | What it does |
 |---------|--------------|
+| `gui [--port] [--no-browser] [--paused]` | Open the web dashboard (it runs the tracker while open) |
 | `init` | Create `config.yaml` from the example |
 | `list` | Products, listings, refresh rates, last status |
 | `check [--product P] [--no-alerts]` | Check everything once |
@@ -328,5 +361,6 @@ python -m unittest discover -s tests     # runs offline against a local test ser
 ```
 
 Code: `stocktracker/config.py` (config and validation), `fetch.py` (HTTP, bot-check detection),
-`extract.py` (page/API parsing), `storage.py` (SQLite history), `alerts.py`, `notify.py`,
-`engine.py` (checks and scheduler), `cli.py`.
+`extract.py` (page/API parsing), `storage.py` (SQLite history and alert log), `alerts.py`, `notify.py`,
+`engine.py` (checks and scheduler), `cli.py`, `gui.py` (local web server and API) and
+`web/index.html` (the dashboard; plain HTML/CSS/JS, no build step or CDN).

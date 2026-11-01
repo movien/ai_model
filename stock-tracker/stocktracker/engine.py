@@ -45,6 +45,11 @@ class Tracker:
         self.notifiers = notifiers if notifiers is not None else build_notifiers(config.raw.get("notifications"))
         self.sleep = sleep
         self._mtime = self._config_mtime()
+        # Scheduler state (read by the GUI): when each listing is due, consecutive failures,
+        # and the listing being checked right now.
+        self.due: dict[str, float] = {}
+        self.failures: dict[str, int] = {}
+        self.current: Listing | None = None
 
     # ---- single checks
 
@@ -67,8 +72,10 @@ class Tracker:
 
         if out.status == "ok":
             out.alert = evaluate(listing, prev, out.result, self.config.settings)
-            if out.alert and send_alerts:
-                send_all(self.notifiers, out.alert)
+            if out.alert:
+                self.store.record_alert(listing, out.alert)
+                if send_alerts:
+                    send_all(self.notifiers, out.alert)
         return out
 
     def check_all(
@@ -124,6 +131,48 @@ class Tracker:
         jitter = settings["jitter"]
         return max(1.0, delay * (1 + random.uniform(-jitter, jitter)))
 
+    def _current_listings(self, product: str | None) -> dict[str, Listing]:
+        try:
+            return {l.key: l for l in self.config.listings(product)}
+        except ConfigError as e:  # e.g. the filtered product was removed from the config
+            log.error("%s", e)
+            return {}
+
+    def run_step(
+        self,
+        product: str | None = None,
+        on_outcome: Callable[[Outcome], None] | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        only: set[str] | None = None,
+        stop: Callable[[], bool] | None = None,
+    ) -> float:
+        """Check every listing that is due (optionally only `only`). Returns seconds until the next one."""
+        self.reload_if_changed()
+        listings = self._current_listings(product)
+        now = clock()
+        for key in list(self.due):
+            if key not in listings:
+                del self.due[key]
+        for key in listings:
+            self.due.setdefault(key, now)
+        if not listings:
+            return 5.0
+        ready = sorted((k for k, t in self.due.items() if t <= now and (only is None or k in only)), key=self.due.get)
+        for key in ready:
+            if stop and stop():
+                break
+            self.current = listings[key]
+            try:
+                out = self.check(listings[key])
+            finally:
+                self.current = None
+            self.failures[key] = 0 if out.status == "ok" else self.failures.get(key, 0) + 1
+            out.next_in = self.next_delay(out, self.failures[key])
+            self.due[key] = clock() + out.next_in
+            if on_outcome:
+                on_outcome(out)
+        return max(0.0, min(self.due.values()) - clock())
+
     def run(
         self,
         product: str | None = None,
@@ -132,43 +181,25 @@ class Tracker:
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         """Check every listing on its own interval until interrupted (Ctrl+C)."""
-        due: dict[str, float] = {}
-        failures: dict[str, int] = {}
         done = 0
         warned_empty = False
-        while True:
-            self.reload_if_changed()
-            try:
-                listings = {l.key: l for l in self.config.listings(product)}
-            except ConfigError as e:  # e.g. the filtered product was removed from the config
-                log.error("%s", e)
-                listings = {}
-            now = clock()
-            for key in list(due):
-                if key not in listings:
-                    del due[key]
-            for key in listings:
-                due.setdefault(key, now)
 
-            if not listings:
+        def counted(out: Outcome) -> None:
+            nonlocal done
+            done += 1
+            if on_outcome:
+                on_outcome(out)
+
+        def finished() -> bool:
+            return max_checks is not None and done >= max_checks
+
+        while not finished():
+            wait = self.run_step(product, counted, clock, stop=finished)
+            if not self.due:
                 if not warned_empty:
                     log.warning("nothing to track yet; add products to %s (it is re-read automatically)", self.config.path)
                     warned_empty = True
-                self.sleep(5)
-                continue
-            warned_empty = False
-
-            for key in sorted((k for k, t in due.items() if t <= now), key=lambda k: due[k]):
-                out = self.check(listings[key])
-                failures[key] = 0 if out.status == "ok" else failures.get(key, 0) + 1
-                out.next_in = self.next_delay(out, failures[key])
-                due[key] = clock() + out.next_in
-                if on_outcome:
-                    on_outcome(out)
-                done += 1
-                if max_checks is not None and done >= max_checks:
-                    return
-
-            wait = min(due.values()) - clock()
-            if wait > 0:
+            else:
+                warned_empty = False
+            if wait > 0 and not finished():
                 self.sleep(min(wait, 5.0))  # wake regularly to notice config edits

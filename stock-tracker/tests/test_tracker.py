@@ -666,5 +666,134 @@ class TestMicroCenter(unittest.TestCase):
         self.assertIn("westmont (025)", out.getvalue())
 
 
+class TestGUI(unittest.TestCase):
+    """The local web GUI's API, served on a random port against the fixture pages."""
+
+    def setUp(self):
+        import requests
+
+        from stocktracker.gui import App, create_server
+
+        self.tmp = Path(tempfile.mkdtemp())
+        self.path = write_config(self.tmp, [{"name": "RTX 5090", "target_price": 2000,
+                                             "listings": [{"url": BASE + "/jsonld-in-stock"}]}])
+        self.app = App(self.path, watching=False)
+        self.server = create_server(self.app, port=0)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.app.monitor.start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.http = requests.Session()
+        self.http.trust_env = False
+        self.http.headers["X-Token"] = self.app.token
+
+    def tearDown(self):
+        self.http.close()
+        self.app.monitor.stop()
+        self.server.shutdown()
+        self.server.server_close()
+
+    def get(self, path):
+        r = self.http.get(self.base + path, timeout=10)
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()
+
+    def post(self, path, body=None, status=200):
+        r = self.http.post(self.base + path, json=body or {}, timeout=20)
+        self.assertEqual(r.status_code, status, r.text)
+        return r.json()
+
+    def wait_for(self, cond, timeout=10.0):
+        import time
+
+        end = time.time() + timeout
+        while time.time() < end:
+            state = self.get("/api/state")
+            if cond(state):
+                return state
+            time.sleep(0.1)
+        self.fail("condition not reached")
+
+    def test_page_and_security(self):
+        page_html = self.http.get(self.base + "/", timeout=5)
+        self.assertEqual(page_html.status_code, 200)
+        self.assertIn(self.app.token, page_html.text)
+        self.assertNotIn("__API_TOKEN__", page_html.text)
+        self.assertIn("frame-ancestors 'none'", page_html.headers["Content-Security-Policy"])
+        no_token = self.http.get(self.base + "/api/state", headers={"X-Token": "wrong"}, timeout=5)
+        self.assertEqual(no_token.status_code, 403)
+        rebinding = self.http.get(self.base + "/api/state", headers={"Host": "evil.example"}, timeout=5)
+        self.assertEqual(rebinding.status_code, 403)
+        self.assertEqual(self.http.post(self.base + "/api/nope", json={}, timeout=5).status_code, 404)
+
+    def test_full_flow(self):
+        state = self.get("/api/state")
+        self.assertEqual(state["products"][0]["name"], "RTX 5090")
+        self.assertFalse(state["monitor"]["watching"])
+
+        # check now while paused -> result and alert recorded
+        self.post("/api/check", {"product": "RTX 5090"})
+        state = self.wait_for(lambda s: s["products"][0]["listings"][0]["last"] is not None)
+        listing = state["products"][0]["listings"][0]
+        self.assertEqual((listing["last"]["status"], listing["last"]["price"], listing["last"]["in_stock"]), ("ok", 1999.99, 1))
+        self.assertEqual(state["alerts"][0]["kinds"], "in_stock,target")
+        self.assertEqual(state["activity"][0]["status"], "ok")
+
+        hist = self.get("/api/history?product=rtx")
+        self.assertEqual(hist["target_price"], 2000)
+        self.assertEqual(hist["series"][0]["points"][-1]["price"], 1999.99)
+
+        # products and listings
+        self.post("/api/product/add", {"name": "Steam Deck", "target_price": "$399", "interval": "10m"})
+        r = self.post("/api/listing/add", {"product": "Steam Deck", "url": BASE + "/keywords-buy", "label": "OLED"})
+        self.wait_for(lambda s: any(l["key"] == r["key"] and l["last"] for p in s["products"] for l in p["listings"]))
+        self.post("/api/product/edit", {"name": "Steam Deck", "changes": {"target_price": "", "max_price": "550", "enabled": False}})
+        self.post("/api/listing/edit", {"product": "Steam Deck", "number": 1, "changes": {"label": "OLED 1TB", "interval": "15m"}})
+        deck = next(p for p in self.get("/api/state")["products"] if p["name"] == "Steam Deck")
+        self.assertEqual((deck["target_price"], deck["max_price"], deck["enabled"]), (None, 550.0, False))
+        self.assertEqual((deck["listings"][0]["label"], deck["listings"][0]["interval_raw"]), ("OLED 1TB", "15m"))
+        err = self.post("/api/listing/add", {"product": "Steam Deck", "url": "not a url"}, status=400)
+        self.assertIn("http", err["error"])
+
+        # test-url, retailers, stores, settings, notifications
+        t = self.post("/api/test-url", {"url": BASE + "/selectors", "overrides": {"price_selector": ".price-now", "stock_selector": "#buy"}})
+        self.assertEqual((t["status"], t["price"], t["in_stock"]), ("ok", 1849.99, True))
+        self.assertEqual(self.post("/api/test-url", {"url": BASE + "/cloudflare"})["status"], "blocked")
+        self.assertTrue(self.post("/api/retailer/save", {"key": "teststore", "fields": {
+            "name": "Test Store", "domains": "shop.example, store.example", "out_of_stock_text": "Sold out, Gone"}})["created"])
+        self.post("/api/retailer/save", {"key": "microcenter", "fields": {"store": "phoenix"}})
+        state = self.get("/api/state")
+        mc = next(x for x in state["retailers"] if x["key"] == "microcenter")
+        self.assertEqual(mc["default_store_label"], "phoenix (205)")
+        ts = next(x for x in state["retailers"] if x["key"] == "teststore")
+        self.assertEqual(ts["domains"], ["shop.example", "store.example"])
+        self.post("/api/retailer/save", {"key": "microcenter", "fields": {"store": "gotham"}}, status=400)
+        self.post("/api/retailer/remove", {"key": "teststore"})
+
+        self.post("/api/settings", {"settings": {"default_interval": "2m", "price_drop_min_percent": "2.5"}})
+        self.post("/api/settings", {"settings": {"default_interval": "whenever"}}, status=400)
+        self.assertEqual(self.get("/api/state")["settings"]["raw"]["price_drop_min_percent"], 2.5)
+
+        self.assertEqual(self.post("/api/test-notify")["results"], {})  # console is off in tests
+        self.post("/api/notifications", {"changes": {"desktop": True, "discord": {"webhook_url": "https://discord.example/hook/SECRET"}}})
+        n = self.get("/api/state")["notifications"]
+        self.assertEqual(n["discord"]["webhook_url"], {"value": "", "is_set": True})  # secret not sent back
+        self.assertIn("discord", n["active"])
+        self.post("/api/notifications", {"changes": {"sms": {"to": "1"}}}, status=400)
+
+        # watching on -> the monitor schedules listings by itself
+        self.post("/api/watch", {"on": True})
+        self.wait_for(lambda s: s["monitor"]["watching"] and s["products"][0]["listings"][0]["next_in"] is not None)
+
+        self.post("/api/listing/remove", {"product": "Steam Deck", "number": 1})
+        self.post("/api/product/remove", {"name": "Steam Deck"})
+        self.assertEqual([p["name"] for p in self.get("/api/state")["products"]], ["RTX 5090"])
+        self.assertEqual(BLOCKED_POSTS, [])
+
+    def test_config_error_is_reported(self):
+        self.path.write_text("products: {not: a list}\n", encoding="utf-8")
+        state = self.get("/api/state")
+        self.assertIn("must be a list", state["config_error"])
+
+
 if __name__ == "__main__":
     unittest.main()

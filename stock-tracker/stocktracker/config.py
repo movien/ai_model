@@ -90,6 +90,17 @@ BUILTIN_RETAILERS: dict[str, dict[str, Any]] = {
     },
 }
 
+# Notification fields the CLI/GUI may edit. A trailing * marks secrets (never shown back).
+NOTIFY_FIELDS: dict[str, tuple[str, ...]] = {
+    "ntfy": ("topic", "server", "token*"),
+    "discord": ("webhook_url*",),
+    "telegram": ("bot_token*", "chat_id"),
+    "email": ("smtp_host", "port", "username", "password*", "from", "to"),
+    "webhook": ("url*",),
+}
+NOTIFY_FLAGS = ("console", "bell", "desktop")
+TEXT_SETTINGS = ("user_agent", "database", "currency")
+
 HEADER = (
     "# Stock tracker config. Every option is documented in config.example.yaml.\n"
     "# CLI commands rewrite this file, so comments added here are not kept\n"
@@ -190,6 +201,26 @@ def store_label(retailer: dict[str, Any], store_id: str | None) -> str | None:
 
 def uses_store(retailer: dict[str, Any]) -> bool:
     return bool(retailer.get("stores")) or any("{store}" in str(v) for v in (retailer.get("url_params") or {}).values())
+
+
+def coerce_value(value: Any) -> Any:
+    """CLI/form text -> int/float/bool when it clearly is one ("025"-style IDs stay text)."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    low = text.lower()
+    if re.fullmatch(r"0\d+", low):
+        return text
+    if low in ("true", "yes", "on"):
+        return True
+    if low in ("false", "no", "off"):
+        return False
+    for cast in (int, float):
+        try:
+            return cast(text)
+        except ValueError:
+            pass
+    return text
 
 
 def _opt_price(value: Any, what: str) -> float | None:
@@ -607,6 +638,78 @@ class Config:
             p["listings"].remove(listing)
             raise
         return listing, key
+
+    def edit_listing(self, product: str, number: int, changes: dict[str, Any]) -> dict[str, Any]:
+        """Change one listing's fields; None removes a field (e.g. back to the product's interval)."""
+        p = self.find_product_raw(product)
+        if not 1 <= number <= len(p["listings"]):
+            raise ConfigError(f"{p['name']!r} has {len(p['listings'])} listing(s)")
+        listing = p["listings"][number - 1]
+        old = copy.deepcopy(listing)
+        for k, v in changes.items():
+            if k not in ("url", "retailer", "sku", "variant", "store", "label", "interval", "enabled"):
+                raise ConfigError(f"listings have no field {k!r}")
+            if v is None or v == "":
+                listing.pop(k, None)
+            else:
+                listing[k] = v
+        if listing.get("enabled") is True:
+            listing.pop("enabled")
+        try:
+            self.validate()
+        except ConfigError:
+            listing.clear()
+            listing.update(old)
+            raise
+        return listing
+
+    def adhoc_listing(
+        self,
+        url: str,
+        retailer: str | None = None,
+        sku: str | None = None,
+        variant: str | None = None,
+        store: str | None = None,
+        overrides: dict[str, Any] | None = None,
+    ) -> Listing:
+        """A listing that isn't saved anywhere, for trying a URL (test-url / GUI "Test")."""
+        key = retailer or self.retailer_for_url(url)
+        retailers = self.retailers_raw()
+        if key not in retailers:
+            raise ConfigError(f"unknown retailer {key!r} (known: {', '.join(retailers)})")
+        raw = {**retailers[key], **(overrides or {})}
+        if not sku and url and raw.get("sku_pattern"):
+            m = re.search(str(raw["sku_pattern"]), url)
+            sku = (next((g for g in m.groups() if g), None) or m.group(0)) if m else None
+        fields = {k: v for k, v in {"url": url, "sku": sku, "variant": variant, "store": store}.items() if v}
+        rexp = expand_env(raw)
+        store_id = resolve_store(rexp, store or rexp.get("store")) if uses_store(rexp) else None
+        return Listing(product=Product(name="(test)"), index=1, retailer_key=key, retailer=rexp,
+                       retailer_raw=raw, fields=fields, interval=0, store_id=store_id)
+
+    def set_notifications(self, changes: dict[str, Any]) -> None:
+        """changes: {"desktop": True, "ntfy": {"topic": "abc"}, ...}; only known fields."""
+        notes = self.raw["notifications"]
+        old = copy.deepcopy(notes)
+        try:
+            for channel, value in changes.items():
+                if channel in NOTIFY_FLAGS:
+                    notes[channel] = bool(value)
+                    continue
+                if channel not in NOTIFY_FIELDS or not isinstance(value, dict):
+                    raise ConfigError(f"unknown notification setting {channel!r}")
+                allowed = {f.rstrip("*") for f in NOTIFY_FIELDS[channel]}
+                section = notes.get(channel)
+                if not isinstance(section, dict):
+                    section = notes[channel] = {}
+                for field_name, v in value.items():
+                    if field_name not in allowed:
+                        raise ConfigError(f"{channel} has no field {field_name!r}")
+                    section[field_name] = int(v) if field_name == "port" and str(v).strip().isdigit() else (v or "")
+            self.validate()
+        except (ConfigError, ValueError):
+            self.raw["notifications"] = old
+            raise
 
     def remove_listing(self, product: str, number: int) -> dict[str, Any]:
         p = self.find_product_raw(product)

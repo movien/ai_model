@@ -1,0 +1,1243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Tracker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f6fed'/%3E%3Cpath d='M7 21l6-6 4 4 8-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f4f5f7; --surface: #ffffff; --surface-2: #f1f3f6; --surface-3: #e9ecf1; --border: #e1e5eb; --border-strong: #cfd5dd;
+  --text: #13161b; --muted: #5d6673; --faint: #8a929d;
+  --accent: #2f6fed; --accent-hover: #2059d1; --accent-weak: #e8efff; --accent-text: #ffffff;
+  --ok: #12804a; --ok-weak: #e1f5e9; --bad: #c2352b; --bad-weak: #fdeae8; --warn: #9a5b00; --warn-weak: #fff2d6;
+  --idle: #6a7380; --idle-weak: #edf0f3;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 1px 3px rgba(16, 24, 40, .07);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, .18), 0 2px 6px rgba(16, 24, 40, .08);
+  --radius: 14px; --radius-sm: 9px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1115; --surface: #161a20; --surface-2: #1d222a; --surface-3: #262c35; --border: #29303a; --border-strong: #38414d;
+    --text: #e7eaee; --muted: #9ba5b2; --faint: #6c7581;
+    --accent: #5e8eff; --accent-hover: #7aa2ff; --accent-weak: #1b2846; --accent-text: #0b1020;
+    --ok: #41d17f; --ok-weak: #11301d; --bad: #ff6f63; --bad-weak: #3b1916; --warn: #f3b33b; --warn-weak: #392b0e;
+    --idle: #9ba5b2; --idle-weak: #232931;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35); --shadow-lg: 0 14px 40px rgba(0, 0, 0, .55);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1115; --surface: #161a20; --surface-2: #1d222a; --surface-3: #262c35; --border: #29303a; --border-strong: #38414d;
+  --text: #e7eaee; --muted: #9ba5b2; --faint: #6c7581;
+  --accent: #5e8eff; --accent-hover: #7aa2ff; --accent-weak: #1b2846; --accent-text: #0b1020;
+  --ok: #41d17f; --ok-weak: #11301d; --bad: #ff6f63; --bad-weak: #3b1916; --warn: #f3b33b; --warn-weak: #392b0e;
+  --idle: #9ba5b2; --idle-weak: #232931;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .35); --shadow-lg: 0 14px 40px rgba(0, 0, 0, .55);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.hidden { display: none !important; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--border);
+}
+.topbar-inner { max-width: 1240px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; letter-spacing: -.01em; margin-right: auto; }
+.brand-mark { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; color: #fff; }
+.brand-mark svg { width: 18px; height: 18px; stroke: #fff; stroke-width: 2.6; }
+.brand small { display: block; font-weight: 450; font-size: 12px; color: var(--muted); letter-spacing: 0; }
+.monitor { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.checking-now { color: var(--muted); font-size: 12.5px; max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toolbar { display: flex; gap: 8px; align-items: center; }
+
+.switch {
+  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface);
+  border-radius: 999px; padding: 5px 12px 5px 6px; cursor: pointer; font-weight: 550; font-size: 13px;
+}
+.switch .track { width: 30px; height: 18px; border-radius: 999px; background: var(--surface-3); position: relative; transition: background .2s; }
+.switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .2s; }
+.switch[aria-checked="true"] .track { background: var(--ok); }
+.switch[aria-checked="true"] .track::after { transform: translateX(12px); }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); animation: pulse 1.8s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--border-strong);
+  background: var(--surface); border-radius: var(--radius-sm); padding: 7px 12px; cursor: pointer; font-weight: 550;
+  white-space: nowrap; transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.danger { color: var(--bad); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.sm { padding: 5px 9px; font-size: 13px; }
+.icon-btn { width: 32px; height: 32px; padding: 0; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--muted); display: inline-grid; place-items: center; cursor: pointer; }
+.icon-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.icon-btn.danger:hover { color: var(--bad); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- tabs ---------- */
+.tabs { max-width: 1240px; margin: 0 auto; padding: 0 20px; display: flex; gap: 4px; overflow-x: auto; }
+.tab { border: none; background: none; padding: 10px 12px; cursor: pointer; color: var(--muted); font-weight: 560; border-bottom: 2px solid transparent; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; }
+
+main { max-width: 1240px; margin: 0 auto; padding: 20px 20px 80px; }
+.banner { display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; border: 1px solid; font-size: 13.5px; }
+.banner pre { margin: 4px 0 0; white-space: pre-wrap; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.banner.err { background: var(--bad-weak); border-color: color-mix(in srgb, var(--bad) 35%, transparent); color: var(--bad); }
+.banner.warn { background: var(--warn-weak); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--warn); }
+.banner .grow { flex: 1; min-width: 0; color: var(--text); }
+
+/* ---------- stats ---------- */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+.stat .label { color: var(--muted); font-size: 12.5px; font-weight: 550; }
+.stat .value { font-size: 26px; font-weight: 680; letter-spacing: -.02em; margin-top: 2px; }
+.stat .value.ok { color: var(--ok); }
+.stat .sub { color: var(--faint); font-size: 12px; }
+
+/* ---------- product cards ---------- */
+.products { display: grid; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.product.paused { opacity: .78; }
+.product-head { display: flex; gap: 12px; align-items: flex-start; padding: 16px 16px 10px 18px; }
+.product-head h2 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12px; color: var(--muted); font-weight: 520; white-space: nowrap; }
+.chip svg.i { width: 13px; height: 13px; }
+.chip.warn { background: var(--warn-weak); color: var(--warn); border-color: transparent; }
+.chip.ok { background: var(--ok-weak); color: var(--ok); border-color: transparent; }
+.card-actions { margin-left: auto; display: flex; gap: 2px; align-items: center; }
+.summary { margin: 0 18px 12px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; font-size: 13.5px; }
+.summary strong { font-size: 15px; }
+.summary.good { background: var(--ok-weak); }
+.summary.good strong { color: var(--ok); }
+
+details.menu { position: relative; }
+details.menu > summary { list-style: none; }
+details.menu > summary::-webkit-details-marker { display: none; }
+.menu-pop { position: absolute; right: 0; top: 36px; z-index: 15; min-width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 5px; }
+.menu-pop button { display: flex; width: 100%; gap: 9px; align-items: center; padding: 8px 10px; border: 0; background: none; border-radius: 7px; cursor: pointer; text-align: left; }
+.menu-pop button:hover { background: var(--surface-2); }
+.menu-pop button.danger { color: var(--bad); }
+
+.listings { border-top: 1px solid var(--border); }
+.listing {
+  display: grid; grid-template-columns: 118px minmax(0, 1fr) 150px 96px 150px auto; gap: 14px; align-items: center;
+  padding: 11px 16px 11px 18px; border-bottom: 1px solid var(--border);
+}
+.listing:last-child { border-bottom: none; }
+.listing.paused { opacity: .6; }
+.listing .who { min-width: 0; }
+.listing .who .name { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.listing .who .name a { color: var(--text); }
+.listing .who .name a:hover { color: var(--accent); }
+.listing .who .sub { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.listing .who .err { color: var(--warn); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.listing .price { text-align: right; }
+.listing .price .big { font-size: 16px; font-weight: 650; }
+.listing .price .stale { color: var(--faint); font-size: 11.5px; }
+.change { font-size: 12px; font-weight: 600; }
+.change.down { color: var(--ok); }
+.change.up { color: var(--bad); }
+.listing .when { font-size: 12px; color: var(--muted); text-align: right; line-height: 1.5; }
+.listing .row-actions { display: flex; gap: 0; justify-content: flex-end; }
+.spark { width: 96px; height: 30px; display: block; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 650; white-space: nowrap; justify-self: start; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-weak); color: var(--ok); }
+.pill.bad { background: var(--bad-weak); color: var(--bad); }
+.pill.warn { background: var(--warn-weak); color: var(--warn); }
+.pill.idle { background: var(--idle-weak); color: var(--idle); }
+.pill.busy { background: var(--accent-weak); color: var(--accent); }
+.pill.busy::before { width: 9px; height: 9px; background: none; border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-listings { padding: 18px; text-align: center; color: var(--muted); }
+.empty { text-align: center; padding: 56px 24px; }
+.empty h2 { margin: 12px 0 6px; font-size: 20px; }
+.empty p { color: var(--muted); max-width: 520px; margin: 0 auto 18px; }
+.empty .art { width: 64px; height: 64px; border-radius: 18px; background: var(--accent-weak); color: var(--accent); display: inline-grid; place-items: center; }
+.empty .art svg { width: 30px; height: 30px; }
+
+/* ---------- chart ---------- */
+.chart-wrap { margin: 0 18px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px 8px; position: relative; background: var(--surface); }
+.chart-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.chart-head h3 { margin: 0; font-size: 13.5px; }
+.chart-svg { width: 100%; height: 240px; display: block; overflow: visible; }
+.chart-svg text { fill: var(--faint); font-size: 11px; }
+.chart-svg .grid { stroke: var(--border); stroke-width: 1; }
+.chart-svg .ref { stroke-width: 1.5; stroke-dasharray: 5 4; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); padding-top: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.tooltip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; white-space: nowrap; z-index: 5; }
+.chart-empty { color: var(--muted); padding: 28px 0; text-align: center; }
+
+/* ---------- activity / tables ---------- */
+.two-col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.panel-head h2 { margin: 0; font-size: 15px; }
+.alert-item { padding: 12px 16px; border-bottom: 1px solid var(--border); display: grid; gap: 3px; }
+.alert-item:last-child { border-bottom: none; }
+.alert-item .t { font-weight: 620; }
+.alert-item .m { color: var(--muted); white-space: pre-line; font-size: 13px; overflow-wrap: anywhere; }
+.alert-item .k { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--faint); }
+.alert-item.fresh { background: color-mix(in srgb, var(--accent-weak) 55%, transparent); }
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.tbl th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.tbl td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.tbl tr:last-child td { border-bottom: none; }
+table.tbl td.wrap { overflow-wrap: anywhere; }
+.scroll-x { overflow-x: auto; }
+.code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--surface-2); padding: 1px 6px; border-radius: 5px; }
+
+/* ---------- forms ---------- */
+.form { display: grid; gap: 14px; }
+.field { display: grid; gap: 5px; }
+.field > span { font-weight: 580; font-size: 13px; }
+.field .hint, .hint { color: var(--muted); font-size: 12.5px; margin: 0; }
+.input, select.input, textarea.input {
+  width: 100%; border: 1px solid var(--border-strong); background: var(--surface); border-radius: var(--radius-sm);
+  padding: 8px 10px; min-height: 36px;
+}
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.check { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--accent); }
+.form-error { color: var(--bad); background: var(--bad-weak); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; white-space: pre-wrap; }
+.result { border-radius: var(--radius-sm); padding: 11px 13px; font-size: 13px; border: 1px solid var(--border); background: var(--surface-2); display: grid; gap: 4px; }
+.result.ok { background: var(--ok-weak); border-color: transparent; }
+.result.warn { background: var(--warn-weak); border-color: transparent; }
+.result.err { background: var(--bad-weak); border-color: transparent; }
+.result .hd { font-weight: 650; }
+.detected { font-size: 12.5px; color: var(--muted); }
+fieldset.group { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px 14px; margin: 0; display: grid; gap: 12px; }
+fieldset.group legend { padding: 0 6px; font-weight: 620; font-size: 13px; color: var(--muted); }
+.settings-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.settings-grid .card { padding: 0; }
+.card-body { padding: 16px; }
+.secret-row { display: flex; gap: 8px; align-items: center; }
+.stack { display: grid; gap: 16px; align-content: start; }
+details.channel { border: 1px solid var(--border); border-radius: var(--radius-sm); }
+details.channel > summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+details.channel > summary::-webkit-details-marker { display: none; }
+details.channel > summary::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); transform: rotate(45deg); transition: transform .15s; }
+details.channel[open] > summary::after { transform: rotate(-135deg); }
+details.channel > summary .desc { font-weight: 450; color: var(--faint); font-size: 12.5px; }
+details.channel .channel-body { padding: 2px 14px 14px; display: grid; gap: 12px; }
+.secret-row .input { flex: 1; }
+
+/* ---------- modal & toasts ---------- */
+.backdrop { position: fixed; inset: 0; background: rgba(10, 14, 20, .5); display: grid; place-items: start center; padding: 6vh 16px 16px; z-index: 50; overflow-y: auto; animation: fade .12s ease-out; }
+@keyframes fade { from { opacity: 0; } }
+.modal { width: min(560px, 100%); background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-lg); border: 1px solid var(--border); animation: pop .14s ease-out; }
+.modal.wide { width: min(760px, 100%); }
+@keyframes pop { from { transform: translateY(8px) scale(.985); opacity: 0; } }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 6px; }
+.modal-head h2 { margin: 0; font-size: 17px; }
+.modal-body { padding: 10px 18px 4px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 18px 18px; flex-wrap: wrap; }
+.modal-foot .left { margin-right: auto; }
+.toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 60; width: min(380px, calc(100vw - 32px)); }
+.toast { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); box-shadow: var(--shadow-lg); border-radius: 10px; padding: 11px 14px; animation: pop .15s ease-out; font-size: 13.5px; }
+.toast.ok { border-left-color: var(--ok); }
+.toast.err { border-left-color: var(--bad); }
+.toast.alert { border-left-color: var(--ok); }
+.toast .t { font-weight: 650; }
+.toast .m { color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1000px) {
+  .listing { grid-template-columns: 110px minmax(0, 1fr) 130px auto; }
+  .listing .spark-cell, .listing .when { display: none; }
+  .two-col, .settings-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .topbar-inner { padding: 10px 16px; gap: 10px; }
+  .brand small, .checking-now { display: none; }
+  .toolbar .btn .lbl { display: none; }
+  main { padding: 16px 16px 80px; }
+  .tabs { padding: 0 12px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .listing { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 12px 14px; }
+  .listing .pill { grid-row: 1; }
+  .listing .who { grid-column: 1 / -1; grid-row: 2; }
+  .listing .price { grid-row: 1; grid-column: 2; }
+  .listing .row-actions { grid-column: 1 / -1; justify-content: flex-start; margin-left: -8px; }
+  .product-head { padding: 14px 12px 8px 14px; flex-wrap: wrap; }
+  .product-head > div:first-child { flex: 1 1 100%; }
+  .card-actions { margin-left: -6px; }
+  .tab { padding: 10px 8px; font-size: 13.5px; }
+  .summary, .chart-wrap { margin-left: 14px; margin-right: 14px; }
+  .row2, .row3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark"><svg class="i" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg></div>
+      <div>Stock Tracker<small>Restocks &amp; price drops, any store</small></div>
+    </div>
+    <div class="monitor">
+      <button class="switch" id="watchToggle" role="switch" aria-checked="false" title="Turn automatic checking on or off">
+        <span class="track"></span><span id="watchLabel">Paused</span>
+      </button>
+      <span class="checking-now" id="checkingNow"></span>
+    </div>
+    <div class="toolbar">
+      <button class="btn" data-action="check-all" title="Check every listing now">
+        <svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg><span class="lbl">Check all</span>
+      </button>
+      <button class="btn primary" data-action="add-product">
+        <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span class="lbl">Product</span>
+      </button>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="dashboard" aria-selected="true">Dashboard</button>
+    <button class="tab" role="tab" data-tab="activity" aria-selected="false">Alerts &amp; activity <span class="badge hidden" id="alertBadge">0</span></button>
+    <button class="tab" role="tab" data-tab="retailers" aria-selected="false">Retailers</button>
+    <button class="tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+  </nav>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <section id="tab-dashboard">
+    <div class="stats" id="stats"></div>
+    <div class="products" id="products"></div>
+  </section>
+  <section id="tab-activity" class="hidden">
+    <div class="two-col">
+      <div class="card">
+        <div class="panel-head"><h2>Alerts</h2><span class="faint" id="alertsCount"></span></div>
+        <div id="alertsList"></div>
+      </div>
+      <div class="card">
+        <div class="panel-head"><h2>Recent checks</h2><span class="faint">this session</span></div>
+        <div class="scroll-x" id="activityList"></div>
+      </div>
+    </div>
+  </section>
+  <section id="tab-retailers" class="hidden">
+    <div class="card" style="margin-bottom:16px">
+      <div class="panel-head">
+        <div><h2>Retailers</h2><p class="hint">How each store is read. Listings pick a retailer by its domain, or <span class="code">generic</span>.</p></div>
+        <button class="btn" data-action="add-retailer"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Retailer</button>
+      </div>
+      <div class="scroll-x" id="retailersTable"></div>
+    </div>
+    <div class="card">
+      <div class="panel-head"><div><h2>Try a product page</h2><p class="hint">See what the tracker can read from any URL before you add it.</p></div></div>
+      <div class="card-body">
+        <form class="form" id="tryForm">
+          <div class="row2" style="grid-template-columns: 1fr 220px">
+            <label class="field"><span>Product URL</span><input class="input" name="url" type="url" placeholder="https://www.example.com/product/123" required></label>
+            <label class="field"><span>Retailer</span><select class="input" name="retailer" id="tryRetailer"></select></label>
+          </div>
+          <div><button class="btn primary" type="submit">Test page</button></div>
+          <div id="tryResult"></div>
+        </form>
+      </div>
+    </div>
+  </section>
+  <section id="tab-settings" class="hidden">
+    <div class="settings-grid">
+      <div class="stack">
+        <div class="card">
+          <div class="panel-head"><h2>Refresh rate &amp; politeness</h2></div>
+          <div class="card-body" id="settingsForm"></div>
+        </div>
+        <div class="card">
+          <div class="panel-head"><h2>This browser</h2></div>
+          <div class="card-body form" id="browserForm"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="panel-head"><h2>Notifications</h2><span class="faint" id="activeChannels"></span></div>
+        <div class="card-body" id="notifyForm"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+"use strict";
+const TOKEN = "__API_TOKEN__";
+const $ = (sel, el = document) => el.querySelector(sel);
+const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+const ICON = {
+  refresh: '<svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>',
+  chart: '<svg class="i" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>',
+  plus: '<svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  edit: '<svg class="i" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  trash: '<svg class="i" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>',
+  more: '<svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>',
+  pause: '<svg class="i" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>',
+  play: '<svg class="i" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>',
+  ext: '<svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+  target: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>',
+  clock: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  pin: '<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
+  cap: '<svg class="i" viewBox="0 0 24 24"><path d="M12 3v18M5 8h14"/></svg>',
+  close: '<svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  box: '<svg class="i" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>',
+};
+const SERIES = ["#2f6fed", "#e8590c", "#0ca678", "#ae3ec9", "#f08c00", "#1098ad", "#d6336c", "#5c940d", "#7048e8", "#868e96"];
+const INTERVALS = ["30s", "1m", "2m", "3m", "5m", "10m", "15m", "30m", "1h", "2h", "6h"];
+
+let S = null, receivedAt = 0, online = true;
+let sigs = { dash: "", act: "", ret: "", set: "", notify: "" };
+let lastAlertId = null, unseenAlerts = 0, tab = "dashboard";
+const chartData = {};
+const openCharts = new Set(lsGet("openCharts", []));
+
+function lsGet(k, d) { try { const v = localStorage.getItem("st:" + k); return v == null ? d : JSON.parse(v); } catch { return d; } }
+function lsSet(k, v) { try { localStorage.setItem("st:" + k, JSON.stringify(v)); } catch { /* private mode */ } }
+function esc(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+// ---------------------------------------------------------------- formatting
+function money(v, cur) {
+  if (v == null || isNaN(v)) return "—";
+  const d = Math.abs(v % 1) > 0.0001 ? 2 : 0;
+  try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur || S?.settings?.currency || "USD", minimumFractionDigits: d, maximumFractionDigits: d }).format(v); }
+  catch { return v.toFixed(d); }
+}
+function dur(s) {
+  s = Math.max(0, Math.round(s));
+  if (s < 60) return s + "s";
+  if (s < 3600) { const m = Math.floor(s / 60), r = s % 60; return m + "m" + (r ? " " + r + "s" : ""); }
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h + "h" + (m ? " " + m + "m" : "");
+}
+function ago(ts) {
+  if (!ts) return "never";
+  const s = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (s < 45) return "just now";
+  if (s < 3600) return Math.round(s / 60) + "m ago";
+  if (s < 86400) return Math.round(s / 3600) + "h ago";
+  return Math.round(s / 86400) + "d ago";
+}
+function when(ts) { return ts ? new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"; }
+function host(url) { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; } }
+
+// ---------------------------------------------------------------- api
+async function api(path, body) {
+  const opts = body === undefined ? { headers: { "X-Token": TOKEN } }
+    : { method: "POST", headers: { "X-Token": TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  let res;
+  try { res = await fetch(path, opts); } catch { throw new Error("Can't reach the tracker. Is it still running?"); }
+  const data = await res.json().catch(() => ({ error: res.statusText }));
+  if (!res.ok || data.ok === false) throw new Error(data.error || res.statusText);
+  return data;
+}
+async function act(path, body, okMsg) {
+  try { const r = await api(path, body); if (okMsg) toast(okMsg, "", "ok"); await refresh(); return r; }
+  catch (e) { toast("Something went wrong", e.message, "err"); throw e; }
+}
+
+// ---------------------------------------------------------------- toasts, sound, notifications
+function toast(title, msg = "", kind = "") {
+  const el = document.createElement("div");
+  el.className = "toast " + kind;
+  el.innerHTML = `<div class="t">${esc(title)}</div>${msg ? `<div class="m">${esc(msg)}</div>` : ""}`;
+  $("#toasts").appendChild(el);
+  setTimeout(() => el.remove(), kind === "alert" ? 12000 : 4500);
+}
+function beep() {
+  if (!lsGet("sound", true)) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.18].forEach((t, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = i ? 1046 : 784; o.type = "sine";
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.16);
+      o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.18);
+    });
+  } catch { /* audio blocked */ }
+}
+function handleAlerts() {
+  const alerts = S.alerts || [];
+  const newest = alerts.length ? alerts[0].id : 0;
+  if (lastAlertId === null) { lastAlertId = newest; return; }
+  const fresh = alerts.filter(a => a.id > lastAlertId).reverse();
+  lastAlertId = Math.max(lastAlertId, newest);
+  if (!fresh.length) return;
+  beep();
+  for (const a of fresh) {
+    toast(a.title, a.message.split("\n").slice(0, 2).join("\n"), "alert");
+    if ("Notification" in window && Notification.permission === "granted") {
+      try { const n = new Notification(a.title, { body: a.message, tag: "st-" + a.id }); if (a.url) n.onclick = () => window.open(a.url, "_blank", "noopener"); } catch { /* ignore */ }
+    }
+  }
+  if (tab !== "activity") { unseenAlerts += fresh.length; updateBadge(); }
+}
+function updateBadge() { const b = $("#alertBadge"); b.textContent = unseenAlerts; b.classList.toggle("hidden", !unseenAlerts); }
+
+// ---------------------------------------------------------------- polling
+async function refresh() {
+  try {
+    S = await api("/api/state");
+    receivedAt = Date.now();
+    online = true;
+    render();
+  } catch (e) {
+    online = false;
+    renderBanners(e.message);
+  }
+}
+function poll() { setTimeout(async () => { await refresh(); poll(); }, document.hidden ? 15000 : 3500); }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+
+function allListings() { return (S?.products || []).flatMap(p => p.listings.map(l => ({ p, l }))); }
+function retailer(key) { return (S?.retailers || []).find(r => r.key === key); }
+function strip(obj) { return JSON.stringify(obj, (k, v) => (k === "next_in" ? undefined : v)); }
+
+function render() {
+  renderHeader();
+  renderBanners();
+  const dashSig = strip([S.products, S.monitor.checking, S.monitor.pending, S.monitor.pending_all, S.monitor.watching]);
+  if (dashSig !== sigs.dash) { sigs.dash = dashSig; renderDashboard(); }
+  const actSig = JSON.stringify([S.alerts, S.activity]);
+  if (actSig !== sigs.act) { sigs.act = actSig; renderActivity(); }
+  const retSig = JSON.stringify(S.retailers);
+  if (retSig !== sigs.ret) { sigs.ret = retSig; renderRetailers(); }
+  const setSig = JSON.stringify(S.settings);
+  if (setSig !== sigs.set && !$("#settingsForm").dataset.dirty) { sigs.set = setSig; renderSettings(); }
+  const nSig = JSON.stringify(S.notifications);
+  if (nSig !== sigs.notify && !$("#notifyForm").dataset.dirty) { sigs.notify = nSig; renderNotify(); }
+  handleAlerts();
+  tick();
+}
+
+function renderHeader() {
+  if (!S) return;
+  const w = S.monitor.watching;
+  const t = $("#watchToggle");
+  t.setAttribute("aria-checked", w ? "true" : "false");
+  $("#watchLabel").innerHTML = w ? '<span class="live-dot" style="display:inline-block;margin-right:6px"></span>Watching' : "Paused";
+  const cur = S.monitor.checking && allListings().find(x => x.l.key === S.monitor.checking);
+  $("#checkingNow").textContent = cur ? `Checking ${cur.p.name} @ ${cur.l.retailer_name}…` : "";
+}
+
+function renderBanners(connError) {
+  const out = [];
+  if (connError || !online) out.push(`<div class="banner err"><b>Disconnected.</b><div class="grow">${esc(connError || "Can't reach the tracker.")} Start it again with <span class="code">python tracker.py gui</span>.</div></div>`);
+  if (S?.config_error) out.push(`<div class="banner err"><b>Config problem</b><div class="grow">Fix <span class="code">${esc(S.config_path)}</span> and save; this page updates by itself.<pre>${esc(S.config_error)}</pre></div></div>`);
+  if (S?.monitor?.error && !S?.config_error) out.push(`<div class="banner err"><b>Tracker error</b><div class="grow">${esc(S.monitor.error)}</div></div>`);
+  for (const w of S?.warnings || []) out.push(`<div class="banner warn"><b>Note</b><div class="grow">${esc(w)}</div></div>`);
+  $("#banners").innerHTML = out.join("");
+}
+
+// ---------------------------------------------------------------- dashboard
+function statusOf(l) {
+  const m = S.monitor;
+  if (m.checking === l.key) return ["busy", "Checking…"];
+  if (m.pending_all || (m.pending || []).includes(l.key)) return ["busy", "Queued"];
+  const last = l.last;
+  if (!last) return ["idle", "Not checked"];
+  if (last.status === "blocked") return ["warn", "Blocked"];
+  if (last.status === "error") return ["warn", "Error"];
+  if (last.in_stock === 1) return ["ok", "In stock"];
+  if (last.in_stock === 0) return ["bad", "Sold out"];
+  return ["idle", "Unknown"];
+}
+
+function sparkline(values) {
+  if (!values || values.length < 2) return '<svg class="spark" viewBox="0 0 96 30"></svg>';
+  const min = Math.min(...values), max = Math.max(...values), span = max - min || 1;
+  const step = 96 / (values.length - 1);
+  let d = "";
+  values.forEach((v, i) => {
+    const x = (i * step).toFixed(1), y = (26 - ((v - min) / span) * 22).toFixed(1);
+    d += i ? ` H${x} V${y}` : `M0 ${y}`;
+  });
+  const color = values[values.length - 1] < values[0] ? "var(--ok)" : values[values.length - 1] > values[0] ? "var(--bad)" : "var(--faint)";
+  return `<svg class="spark" viewBox="0 0 96 30" preserveAspectRatio="none"><path d="${d}" stroke="${color}" stroke-width="1.6" fill="none" vector-effect="non-scaling-stroke"/></svg>`;
+}
+
+function productSummary(p) {
+  const live = p.listings.filter(l => l.enabled && l.last_ok);
+  const inStock = live.filter(l => l.last_ok.in_stock === 1 && l.last_ok.price != null).sort((a, b) => a.last_ok.price - b.last_ok.price);
+  const cur = (live[0]?.last_ok?.currency) || S.settings.currency;
+  if (!p.listings.length) return "";
+  if (!live.length) return `<div class="summary"><span class="muted">No results yet. Results show up here after the first check.</span></div>`;
+  if (inStock.length) {
+    const b = inStock[0];
+    const over = p.max_price != null && b.last_ok.price > p.max_price;
+    const atTarget = p.target_price != null && b.last_ok.price <= p.target_price;
+    const where = esc(b.retailer_name) + (b.store_label ? ` (${esc(b.store_label)})` : "");
+    return `<div class="summary ${over ? "" : "good"}"><span>Best in-stock price</span><strong class="num">${money(b.last_ok.price, b.last_ok.currency)}</strong>
+      <span>at ${b.link ? `<a href="${esc(b.link)}" target="_blank" rel="noopener noreferrer">${where}</a>` : where}</span>
+      ${atTarget ? '<span class="chip ok">At or below target</span>' : ""}${over ? '<span class="chip warn">Above your max price</span>' : ""}
+      ${inStock.length > 1 ? `<span class="muted">· in stock at ${inStock.length} listings</span>` : ""}</div>`;
+  }
+  const lows = p.listings.map(l => l.stats.low).filter(v => v != null);
+  const lastSeen = p.listings.map(l => l.stats.last_in_stock).filter(Boolean).sort().pop();
+  return `<div class="summary"><span>Not in stock anywhere right now.</span>
+    ${lows.length ? `<span class="muted">Lowest seen <b class="num">${money(Math.min(...lows), cur)}</b></span>` : ""}
+    <span class="muted">${lastSeen ? `Last in stock ${esc(when(lastSeen))}` : "Never seen in stock yet"}</span></div>`;
+}
+
+function listingRow(p, l) {
+  const [cls, label] = statusOf(l);
+  const last = l.last, ok = l.last_ok;
+  const failed = last && last.status !== "ok";
+  const price = ok?.price;
+  const ch = l.change;
+  const chHtml = ch && Math.abs(ch.diff) >= 0.005 ? `<div class="change ${ch.diff < 0 ? "down" : "up"}" title="since ${esc(when(ch.ts))}">${ch.diff < 0 ? "▼" : "▲"} ${money(Math.abs(ch.diff), ok?.currency)} (${Math.abs(ch.pct).toFixed(1)}%)</div>` : "";
+  const name = l.link ? `<a href="${esc(l.link)}" target="_blank" rel="noopener noreferrer" title="Open product page">${esc(l.retailer_name)} ${ICON.ext}</a>` : esc(l.retailer_name);
+  const store = l.store_label ? `<span class="chip" title="${l.store_is_default ? "Retailer's default store" : "Store for this listing"}">${ICON.pin}${esc(l.store_label)}</span>` : "";
+  const sub = [l.label, ok?.title && ok.title !== l.label ? ok.title : null].filter(Boolean).join(" · ") || (l.url ? host(l.url) : l.sku ? "SKU " + l.sku : "");
+  const watching = S.monitor.watching && l.enabled && p.enabled;
+  const next = l.next_in != null && watching ? `<div>next <span data-due="${receivedAt + l.next_in * 1000}"></span></div>` : (!l.enabled || !p.enabled ? "<div>paused</div>" : (!S.monitor.watching ? "<div>auto-check off</div>" : ""));
+  return `<div class="listing ${l.enabled ? "" : "paused"}" data-key="${esc(l.key)}">
+    <span class="pill ${cls}" title="${esc(last?.error || "")}">${label}</span>
+    <div class="who">
+      <div class="name">${name}${store}${!l.enabled ? '<span class="chip warn">Paused</span>' : ""}</div>
+      ${failed && last.error ? `<div class="err" title="${esc(last.error)}">${esc(last.error)}</div>` : `<div class="sub" title="${esc(sub)}">${esc(sub)}</div>`}
+    </div>
+    <div class="price">
+      <div class="big num">${money(price, ok?.currency)}</div>
+      ${chHtml || (failed && price != null ? `<div class="stale">last known</div>` : "")}
+    </div>
+    <div class="spark-cell">${sparkline(l.spark)}</div>
+    <div class="when">${last ? `<div>checked <span data-ts="${esc(last.ts)}"></span></div>` : "<div>not checked yet</div>"}${next}</div>
+    <div class="row-actions">
+      <button class="icon-btn" data-action="check-listing" title="Check now">${ICON.refresh}</button>
+      <button class="icon-btn" data-action="edit-listing" data-product="${esc(p.name)}" data-number="${l.index}" title="Edit listing">${ICON.edit}</button>
+      <button class="icon-btn danger" data-action="remove-listing" data-product="${esc(p.name)}" data-number="${l.index}" title="Remove listing">${ICON.trash}</button>
+    </div>
+  </div>`;
+}
+
+function productCard(p) {
+  const chips = [];
+  if (p.target_price != null) chips.push(`<span class="chip" title="Alert when the price is at or below this">${ICON.target}Target ${money(p.target_price)}</span>`);
+  if (p.max_price != null) chips.push(`<span class="chip" title="In-stock offers above this are ignored">${ICON.cap}Max ${money(p.max_price)}</span>`);
+  chips.push(`<span class="chip" title="Refresh rate">${ICON.clock}every ${dur(p.interval)}${p.interval_raw ? "" : " (default)"}</span>`);
+  chips.push(`<span class="chip">${p.listings.length} listing${p.listings.length === 1 ? "" : "s"}</span>`);
+  if (!p.enabled) chips.push('<span class="chip warn">Paused</span>');
+  const open = openCharts.has(p.name);
+  const n = esc(p.name);
+  return `<article class="card product ${p.enabled ? "" : "paused"}" data-product="${n}">
+    <div class="product-head">
+      <div style="min-width:0"><h2>${n}</h2><div class="chips">${chips.join("")}</div></div>
+      <div class="card-actions">
+        <button class="icon-btn" data-action="check-product" data-product="${n}" title="Check this product now">${ICON.refresh}</button>
+        <button class="icon-btn" data-action="chart" data-product="${n}" title="Price history" aria-pressed="${open}">${ICON.chart}</button>
+        <button class="btn sm" data-action="add-listing" data-product="${n}">${ICON.plus}Listing</button>
+        <details class="menu"><summary class="icon-btn" title="More">${ICON.more}</summary>
+          <div class="menu-pop">
+            <button data-action="edit-product" data-product="${n}">${ICON.edit}Edit product</button>
+            <button data-action="toggle-product" data-product="${n}" data-enabled="${p.enabled}">${p.enabled ? ICON.pause + "Pause tracking" : ICON.play + "Resume tracking"}</button>
+            <button class="danger" data-action="remove-product" data-product="${n}">${ICON.trash}Delete product</button>
+          </div></details>
+      </div>
+    </div>
+    ${productSummary(p)}
+    ${open ? `<div class="chart-wrap" data-chart="${n}"><div class="chart-empty">Loading price history…</div></div>` : ""}
+    <div class="listings">${p.listings.length ? p.listings.map(l => listingRow(p, l)).join("") :
+      `<div class="empty-listings">No listings yet. <a href="#" data-action="add-listing" data-product="${n}">Add where to buy it</a>.</div>`}</div>
+  </article>`;
+}
+
+function renderStats() {
+  const ls = allListings();
+  const active = (S.products || []).filter(p => p.enabled).length;
+  const inStock = ls.filter(({ p, l }) => p.enabled && l.enabled && l.last_ok?.in_stock === 1 && l.last?.status === "ok").length;
+  const day = Date.now() - 86400000;
+  const alerts24 = (S.alerts || []).filter(a => new Date(a.ts).getTime() > day).length;
+  const problems = ls.filter(({ l }) => l.last && l.last.status !== "ok").length;
+  $("#stats").innerHTML = `
+    <div class="stat"><div class="label">Products</div><div class="value num">${(S.products || []).length}</div><div class="sub">${active} active</div></div>
+    <div class="stat"><div class="label">Listings</div><div class="value num">${ls.length}</div><div class="sub">${problems ? problems + " blocked or failing" : "all reading fine"}</div></div>
+    <div class="stat"><div class="label">In stock now</div><div class="value num ${inStock ? "ok" : ""}">${inStock}</div><div class="sub">across all listings</div></div>
+    <div class="stat"><div class="label">Alerts, last 24h</div><div class="value num">${alerts24}</div><div class="sub">${S.notifications?.active?.join(", ") || "no channels"}</div></div>`;
+}
+
+function renderDashboard() {
+  if (!S || S.config_error) { $("#products").innerHTML = ""; $("#stats").innerHTML = ""; return; }
+  renderStats();
+  const products = S.products || [];
+  if (!products.length) {
+    $("#products").innerHTML = `<div class="card empty"><div class="art">${ICON.box}</div><h2>Track your first product</h2>
+      <p>Add a product, then paste product page links from the stores that sell it. You get an alert when it comes back in stock or the price drops.</p>
+      <button class="btn primary" data-action="add-product">${ICON.plus}Add a product</button></div>`;
+    return;
+  }
+  $("#products").innerHTML = products.map(productCard).join("");
+  for (const name of openCharts) {
+    const el = $(`[data-chart="${CSS.escape(name)}"]`);
+    if (!el) continue;
+    if (chartData[name]) drawChart(el, chartData[name]);
+    loadChart(name);
+  }
+}
+
+// ---------------------------------------------------------------- chart
+async function loadChart(name) {
+  try {
+    const data = await api("/api/history?product=" + encodeURIComponent(name));
+    const sig = JSON.stringify(data);
+    if (chartData[name] && chartData[name]._sig === sig) return;
+    data._sig = sig;
+    chartData[name] = data;
+    const el = $(`[data-chart="${CSS.escape(name)}"]`);
+    if (el) drawChart(el, data);
+  } catch (e) {
+    const el = $(`[data-chart="${CSS.escape(name)}"]`);
+    if (el) el.innerHTML = `<div class="chart-empty">${esc(e.message)}</div>`;
+  }
+}
+
+function niceTicks(min, max, n = 4) {
+  const span = max - min || Math.abs(max) || 1;
+  const step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= step0) || step0;
+  const ticks = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) ticks.push(v);
+  return ticks;
+}
+
+function drawChart(el, data) {
+  const series = data.series.map((s, i) => ({ ...s, color: SERIES[i % SERIES.length], pts: s.points.filter(p => p.price != null).map(p => ({ t: new Date(p.ts).getTime(), v: p.price, s: p.in_stock })) }))
+    .filter(s => s.pts.length);
+  if (!series.length) { el.innerHTML = `<div class="chart-head"><h3>Price history</h3></div><div class="chart-empty">No prices recorded yet. The chart fills in as checks run.</div>`; return; }
+  const W = Math.max(320, el.clientWidth - 24), H = 240, L = 62, R = 14, T = 12, B = 26;
+  const now = Date.now();
+  let t0 = Math.min(...series.map(s => s.pts[0].t)), t1 = Math.max(now, ...series.map(s => s.pts[s.pts.length - 1].t));
+  if (t1 - t0 < 3600e3) t0 = t1 - 3600e3;
+  const vals = series.flatMap(s => s.pts.map(p => p.v));
+  if (data.target_price != null) vals.push(data.target_price);
+  if (data.max_price != null) vals.push(data.max_price);
+  let v0 = Math.min(...vals), v1 = Math.max(...vals);
+  const pad = (v1 - v0) * 0.08 || v1 * 0.05 || 1; v0 -= pad; v1 += pad;
+  const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
+  const y = v => T + (1 - (v - v0) / (v1 - v0)) * (H - T - B);
+  const yt = niceTicks(v0, v1);
+  const fmtT = t => new Date(t).toLocaleString(undefined, (t1 - t0) > 3 * 86400e3 ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", hour: "numeric" });
+  let g = yt.map(v => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${esc(money(v))}</text>`).join("");
+  for (let i = 0; i <= 3; i++) { const t = t0 + (t1 - t0) * i / 3; g += `<text x="${x(t)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === 3 ? "end" : "middle"}">${esc(fmtT(t))}</text>`; }
+  if (data.target_price != null) g += `<line class="ref" stroke="var(--ok)" x1="${L}" x2="${W - R}" y1="${y(data.target_price)}" y2="${y(data.target_price)}"/><text x="${W - R}" y="${y(data.target_price) - 5}" text-anchor="end" style="fill:var(--ok)">target</text>`;
+  if (data.max_price != null) g += `<line class="ref" stroke="var(--warn)" x1="${L}" x2="${W - R}" y1="${y(data.max_price)}" y2="${y(data.max_price)}"/><text x="${W - R}" y="${y(data.max_price) - 5}" text-anchor="end" style="fill:var(--warn)">max</text>`;
+  for (const s of series) {
+    let d = `M${x(s.pts[0].t)} ${y(s.pts[0].v)}`;
+    for (let i = 1; i < s.pts.length; i++) d += ` H${x(s.pts[i].t)} V${y(s.pts[i].v)}`;
+    d += ` H${x(now)}`;
+    g += `<path d="${d}" stroke="${s.color}" stroke-width="2" fill="none" stroke-linejoin="round"/>`;
+    for (const p of s.pts) g += `<circle cx="${x(p.t)}" cy="${y(p.v)}" r="3.2" fill="${p.s === 1 ? s.color : "var(--surface)"}" stroke="${s.color}" stroke-width="1.6"/>`;
+  }
+  g += `<line id="guide" class="grid" y1="${T}" y2="${H - B}" x1="${L}" x2="${L}" visibility="hidden" style="stroke:var(--border-strong)"/><rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent" class="hit"/>`;
+  el.innerHTML = `<div class="chart-head"><h3>Price history</h3><span class="faint" style="font-size:12px">filled dot = in stock · hollow = sold out</span></div>
+    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${g}</svg>
+    <div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.label)} <b class="num">${money(s.pts[s.pts.length - 1].v)}</b></span>`).join("")}</div>`;
+  const svg = $("svg", el), guide = $("#guide", el);
+  let tip = null;
+  svg.addEventListener("mousemove", ev => {
+    const r = svg.getBoundingClientRect(), mx = (ev.clientX - r.left) * (W / r.width);
+    const t = t0 + (mx - L) / (W - L - R) * (t1 - t0);
+    if (mx < L || mx > W - R) return;
+    guide.setAttribute("x1", mx); guide.setAttribute("x2", mx); guide.setAttribute("visibility", "visible");
+    const rows = series.map(s => { let p = null; for (const q of s.pts) { if (q.t <= t) p = q; else break; } return p ? `<div><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:6px"></i>${esc(s.label)}: <b>${money(p.v)}</b> ${p.s === 1 ? "· in stock" : p.s === 0 ? "· sold out" : ""}</div>` : ""; }).join("");
+    if (!tip) { tip = document.createElement("div"); tip.className = "tooltip"; el.appendChild(tip); }
+    tip.innerHTML = `<div class="faint" style="margin-bottom:3px">${esc(new Date(t).toLocaleString())}</div>${rows || "no data yet"}`;
+    const left = Math.min(ev.clientX - el.getBoundingClientRect().left + 14, el.clientWidth - tip.offsetWidth - 8);
+    tip.style.left = Math.max(8, left) + "px"; tip.style.top = "38px";
+  });
+  svg.addEventListener("mouseleave", () => { guide.setAttribute("visibility", "hidden"); tip?.remove(); tip = null; });
+}
+
+// ---------------------------------------------------------------- activity
+function renderActivity() {
+  const alerts = S.alerts || [];
+  $("#alertsCount").textContent = alerts.length ? `${alerts.length} most recent` : "";
+  $("#alertsList").innerHTML = alerts.length ? alerts.map(a => `<div class="alert-item">
+      <div class="k">${a.kinds.split(",").map(k => `<span class="chip ${k === "in_stock" ? "ok" : ""}">${{ in_stock: "In stock", target: "Target price", price_drop: "Price drop" }[k] || esc(k)}</span>`).join("")}<span>${esc(when(a.ts))}</span></div>
+      <div class="t">${esc(a.title)}</div><div class="m">${esc(a.message)}</div>
+      ${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">Open product page ${ICON.ext}</a>` : ""}</div>`).join("")
+    : `<div class="empty-listings">No alerts yet. You'll get one when something comes into stock, hits your target price or drops in price.</div>`;
+  const act = S.activity || [];
+  $("#activityList").innerHTML = act.length ? `<table class="tbl"><thead><tr><th>Time</th><th>Listing</th><th>Result</th><th style="text-align:right">Price</th></tr></thead><tbody>${act.map(a => {
+    const st = a.status !== "ok" ? ["warn", a.status === "blocked" ? "Blocked" : "Error"] : a.in_stock === true ? ["ok", "In stock"] : a.in_stock === false ? ["bad", "Sold out"] : ["idle", "Unknown"];
+    return `<tr><td class="faint" style="white-space:nowrap">${esc(new Date(a.ts).toLocaleTimeString())}</td><td class="wrap">${esc(a.label)}${a.error ? `<div class="faint" style="font-size:12px">${esc(a.error)}</div>` : ""}</td>
+      <td><span class="pill ${st[0]}">${st[1]}</span>${a.alert ? ' <span class="chip ok">alert</span>' : ""}</td><td class="num" style="text-align:right">${money(a.price, a.currency)}</td></tr>`;
+  }).join("")}</tbody></table>` : `<div class="empty-listings">Checks run while this tracker is open show up here.</div>`;
+}
+
+// ---------------------------------------------------------------- retailers
+function retailerOptions(selected, withAuto = true) {
+  return (withAuto ? `<option value="">Auto-detect from URL</option>` : "") +
+    (S.retailers || []).map(r => `<option value="${esc(r.key)}" ${r.key === selected ? "selected" : ""}>${esc(r.name)} (${esc(r.key)})</option>`).join("");
+}
+function renderRetailers() {
+  const rows = (S.retailers || []).map(r => `<tr>
+    <td><b>${esc(r.name)}</b><div class="faint" style="font-size:12px">${esc(r.key)}</div></td>
+    <td><span class="code">${esc(r.type)}</span></td>
+    <td class="wrap">${r.domains.length ? r.domains.map(esc).join(", ") : '<span class="faint">any (by choice)</span>'}</td>
+    <td>${r.uses_store ? (r.default_store_label ? `${ICON.pin} ${esc(r.default_store_label)}` : '<span class="chip warn">no store set</span>') : '<span class="faint">—</span>'}
+        ${r.needs_api_key ? '<span class="chip warn">needs API key</span>' : ""}</td>
+    <td class="faint">${esc(r.source)}</td>
+    <td style="text-align:right;white-space:nowrap">
+      ${r.uses_store ? `<button class="btn sm" data-action="set-store" data-key="${esc(r.key)}">${ICON.pin}Store</button>` : ""}
+      <button class="icon-btn" data-action="edit-retailer" data-key="${esc(r.key)}" title="Edit">${ICON.edit}</button>
+      ${r.source === "custom" ? `<button class="icon-btn danger" data-action="remove-retailer" data-key="${esc(r.key)}" title="Remove">${ICON.trash}</button>` : ""}
+    </td></tr>`).join("");
+  $("#retailersTable").innerHTML = `<table class="tbl"><thead><tr><th>Retailer</th><th>Type</th><th>Domains</th><th>Store / setup</th><th>Source</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  const sel = $("#tryRetailer"), cur = sel.value;
+  sel.innerHTML = retailerOptions(cur);
+}
+
+function testResultHtml(r) {
+  if (r.status === "blocked") return `<div class="result warn"><div class="hd">Blocked by the site</div><div>${esc(r.error)}</div>
+    <div class="muted">This site rejects automated checks, and the tracker won't try to get around that. Its official API (if it has one) or another store may work instead.</div></div>`;
+  if (r.status === "error") return `<div class="result err"><div class="hd">Couldn't read this page</div><div>${esc(r.error)}</div></div>`;
+  const stock = r.in_stock === true ? "In stock" : r.in_stock === false ? "Sold out" : "Stock unknown";
+  const full = r.price != null && r.in_stock != null;
+  return `<div class="result ${full ? "ok" : "warn"}"><div class="hd">${full ? "Works" : "Partly readable"}: ${stock} · ${money(r.price, r.currency)}</div>
+    ${r.title ? `<div>${esc(r.title)}</div>` : ""}
+    <div class="muted">Read as ${esc(r.retailer_name)}${r.store_label ? ` · store ${esc(r.store_label)}` : ""}. Price from: ${esc(r.price_source || "not found")}. Stock from: ${esc(r.stock_source || "not found")}.</div>
+    ${full ? "" : `<div class="muted">Missing something? Add a CSS selector for this site under Retailers.</div>`}</div>`;
+}
+
+// ---------------------------------------------------------------- settings
+function intervalSelect(name, current, defaultLabel) {
+  const cur = current == null || current === "" ? "" : String(current);
+  const known = INTERVALS.includes(cur) || cur === "";
+  return `<div class="secret-row"><select class="input" name="${name}" data-interval>
+      ${defaultLabel ? `<option value="" ${cur === "" ? "selected" : ""}>${esc(defaultLabel)}</option>` : ""}
+      ${INTERVALS.map(v => `<option value="${v}" ${v === cur ? "selected" : ""}>every ${v}</option>`).join("")}
+      <option value="custom" ${known ? "" : "selected"}>Custom…</option></select>
+    <input class="input ${known ? "hidden" : ""}" name="${name}_custom" placeholder="e.g. 90s, 4m, 1.5h" value="${known ? "" : esc(cur)}" style="max-width:150px"></div>`;
+}
+function readInterval(form, name) {
+  const v = form.elements[name].value;
+  return v === "custom" ? form.elements[name + "_custom"].value.trim() : v;
+}
+document.addEventListener("change", ev => {
+  const sel = ev.target.closest("select[data-interval]");
+  if (sel) { const c = sel.form?.elements[sel.name + "_custom"]; if (c) { c.classList.toggle("hidden", sel.value !== "custom"); if (sel.value === "custom") c.focus(); } }
+});
+
+function renderSettings() {
+  const raw = S.settings.raw;
+  $("#settingsForm").innerHTML = `<form class="form" id="settingsF">
+    <label class="field"><span>Default refresh rate</span>${intervalSelect("default_interval", raw.default_interval, null)}
+      <p class="hint">How often each listing is checked unless its product or the listing sets its own. Now: every ${dur(S.settings.effective_default_interval)}.</p></label>
+    <div class="row2">
+      <label class="field"><span>Fastest allowed</span><select class="input" name="min_interval">${["30s", "1m", "2m", "5m"].map(v => `<option ${String(raw.min_interval) === v ? "selected" : ""}>${v}</option>`).join("")}${["30s", "1m", "2m", "5m"].includes(String(raw.min_interval)) ? "" : `<option selected>${esc(raw.min_interval)}</option>`}</select><p class="hint">Nothing checks faster (floor 30s).</p></label>
+      <label class="field"><span>Gap between requests to one site</span><input class="input" name="per_host_delay" value="${esc(raw.per_host_delay)}"><p class="hint">e.g. 5s. Keeps you from being blocked.</p></label>
+    </div>
+    <div class="row2">
+      <label class="field"><span>Ignore price drops under</span><input class="input" name="price_drop_min_percent" value="${esc(raw.price_drop_min_percent)}" inputmode="decimal"><p class="hint">Percent.</p></label>
+      <label class="field"><span>Currency</span><input class="input" name="currency" value="${esc(raw.currency)}" maxlength="3"><p class="hint">Used when a site doesn't say.</p></label>
+    </div>
+    <label class="field"><span>User-Agent</span><input class="input" name="user_agent" value="${esc(raw.user_agent)}"><p class="hint">How the tracker identifies itself to websites.</p></label>
+    <div><button class="btn primary" type="submit">Save settings</button></div></form>`;
+  const f = $("#settingsF");
+  f.dataset.orig = JSON.stringify(readSettings(f));
+  f.addEventListener("input", () => { $("#settingsForm").dataset.dirty = "1"; });
+  f.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const cur = readSettings(f), orig = JSON.parse(f.dataset.orig), changes = {};
+    for (const k in cur) if (cur[k] !== orig[k]) changes[k] = cur[k];
+    if (!Object.keys(changes).length) { toast("Nothing changed"); return; }
+    try { await act("/api/settings", { settings: changes }, "Settings saved"); delete $("#settingsForm").dataset.dirty; sigs.set = ""; render(); } catch { /* toast shown */ }
+  });
+}
+function readSettings(f) {
+  return { default_interval: readInterval(f, "default_interval"), min_interval: f.elements.min_interval.value, per_host_delay: f.elements.per_host_delay.value.trim(),
+    price_drop_min_percent: f.elements.price_drop_min_percent.value.trim(), currency: f.elements.currency.value.trim().toUpperCase(), user_agent: f.elements.user_agent.value.trim() };
+}
+
+const CHANNELS = [
+  ["ntfy", "Phone push (ntfy)", "free app, no account", [["topic", "Topic", "Install the ntfy app and subscribe to the same hard-to-guess topic, e.g. rtx5090-k93hf", "rtx5090-alerts-k93hf"], ["server", "Server", "", "https://ntfy.sh"], ["token", "Access token", "Only for protected servers", ""]]],
+  ["discord", "Discord", "post to a channel", [["webhook_url", "Webhook URL", "Server settings → Integrations → Webhooks", "https://discord.com/api/webhooks/..."]]],
+  ["telegram", "Telegram", "message from your bot", [["bot_token", "Bot token", "From @BotFather", ""], ["chat_id", "Chat ID", "", ""]]],
+  ["email", "Email", "via any SMTP server", [["smtp_host", "SMTP server", "Gmail needs an app password", "smtp.gmail.com"], ["port", "Port", "587 (STARTTLS) or 465 (SSL)", "587"], ["username", "Username", "", ""], ["password", "Password", "", ""], ["from", "From", "", ""], ["to", "To", "Separate several with commas", "you@example.com"]]],
+  ["webhook", "Webhook", "JSON POST to any URL", [["url", "URL", "Home Assistant, Zapier, n8n, your own script…", "https://..."]]],
+];
+function renderNotify() {
+  const n = S.notifications;
+  $("#activeChannels").textContent = "On: " + (n.active.join(", ") || "none");
+  const flag = (k, label, hint) => `<label class="check"><input type="checkbox" name="${k}" ${n[k] ? "checked" : ""}> <span>${label}${hint ? ` <span class="faint">${hint}</span>` : ""}</span></label>`;
+  const fields = CHANNELS.map(([ch, title, desc, fs]) => {
+    const on = n.active.includes(ch);
+    return `<details class="channel" ${on ? "open" : ""}><summary>${title} ${on ? '<span class="chip ok">on</span>' : `<span class="desc">${desc}</span>`}</summary><div class="channel-body">${fs.map(([f, label, hint, ph]) => {
+      const v = n[ch][f], secret = "is_set" in v;
+      const input = secret
+        ? `<div class="secret-row"><input class="input" type="password" autocomplete="off" name="${ch}.${f}" data-secret placeholder="${v.is_set && !v.value ? "Saved. Leave blank to keep it" : ""}" value="${esc(v.value)}">${v.is_set ? `<button type="button" class="btn sm ghost" data-clear="${ch}.${f}">Clear</button>` : ""}</div>`
+        : `<input class="input" name="${ch}.${f}" value="${esc(v.value)}" placeholder="${esc(ph)}">`;
+      return `<label class="field"><span>${label}</span>${input}${hint ? `<p class="hint">${hint}</p>` : ""}</label>`;
+    }).join("")}</div></details>`;
+  }).join("");
+  $("#notifyForm").innerHTML = `<form class="form" id="notifyF">
+    <div class="form" style="gap:8px">${flag("console", "Show alerts in the terminal")}${flag("bell", "Beep in the terminal")}${flag("desktop", "Desktop popup", "(best with pip install plyer)")}</div>
+    <p class="hint">A channel turns on once its fields are filled in. You can type <span class="code">\${ENV_VAR}</span> to read a secret from an environment variable.</p>
+    ${fields}
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" type="submit">Save notifications</button><button class="btn" type="button" data-action="test-notify">Send test alert</button></div>
+    <div id="notifyResult"></div></form>`;
+  const f = $("#notifyF");
+  const orig = readNotify(f);
+  f.addEventListener("input", () => { $("#notifyForm").dataset.dirty = "1"; });
+  f.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-clear]");
+    if (!b) return;
+    const inp = f.elements[b.dataset.clear];
+    inp.value = ""; inp.dataset.cleared = "1"; inp.placeholder = "Will be removed when you save"; b.remove();
+    $("#notifyForm").dataset.dirty = "1";
+  });
+  f.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const cur = readNotify(f), changes = {};
+    for (const k of ["console", "bell", "desktop"]) if (cur[k] !== orig[k]) changes[k] = cur[k];
+    for (const [ch, , , fs] of CHANNELS) for (const [fname] of fs) {
+      const key = ch + "." + fname, inp = f.elements[key];
+      const changed = inp.dataset.secret !== undefined ? (inp.value !== "" && inp.value !== orig[key]) || inp.dataset.cleared : inp.value !== orig[key];
+      if (changed) (changes[ch] ||= {})[fname] = inp.value.trim();
+    }
+    if (!Object.keys(changes).length) { toast("Nothing changed"); return; }
+    try { await act("/api/notifications", { changes }, "Notifications saved"); delete $("#notifyForm").dataset.dirty; sigs.notify = ""; render(); } catch { /* toast shown */ }
+  });
+}
+function readNotify(f) {
+  const out = { console: f.elements.console.checked, bell: f.elements.bell.checked, desktop: f.elements.desktop.checked };
+  for (const [ch, , , fs] of CHANNELS) for (const [fname] of fs) out[ch + "." + fname] = f.elements[ch + "." + fname].value;
+  return out;
+}
+
+function renderBrowser() {
+  const perm = "Notification" in window ? Notification.permission : "unsupported";
+  const theme = lsGet("theme", "auto");
+  $("#browserForm").innerHTML = `
+    <div class="field"><span>Pop-up notifications on this computer</span>
+      <div>${perm === "granted" ? '<span class="chip ok">Allowed</span>' : perm === "denied" ? '<span class="chip warn">Blocked in browser settings</span>' : perm === "unsupported" ? '<span class="chip">Not supported</span>' : `<button class="btn" data-action="ask-notify">Allow notifications</button>`}</div>
+      <p class="hint">Shown while this page is open (in any tab). For alerts when it isn't open, set up ntfy or another channel.</p></div>
+    <label class="check"><input type="checkbox" id="soundToggle" ${lsGet("sound", true) ? "checked" : ""}> <span>Play a sound on alerts</span></label>
+    <label class="field"><span>Theme</span><select class="input" id="themeSel" style="max-width:220px">${["auto", "light", "dark"].map(t => `<option value="${t}" ${t === theme ? "selected" : ""}>${{ auto: "Match system", light: "Light", dark: "Dark" }[t]}</option>`).join("")}</select></label>
+    <p class="hint">Config file: <span class="code">${esc(S?.config_path || "")}</span></p>`;
+  $("#soundToggle").onchange = e => { lsSet("sound", e.target.checked); if (e.target.checked) beep(); };
+  $("#themeSel").onchange = e => { lsSet("theme", e.target.value); applyTheme(); };
+}
+function applyTheme() { const t = lsGet("theme", "auto"); if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = t; }
+
+// ---------------------------------------------------------------- modals
+function modal(title, body, { submit = "Save", wide = false, onSubmit, extraFoot = "" } = {}) {
+  closeModal();
+  const wrap = document.createElement("div");
+  wrap.className = "backdrop";
+  wrap.innerHTML = `<div class="modal ${wide ? "wide" : ""}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+    <form class="form-modal" novalidate>
+      <div class="modal-head"><h2>${esc(title)}</h2><button type="button" class="icon-btn" data-close title="Close">${ICON.close}</button></div>
+      <div class="modal-body"><div class="form">${body}<div class="form-error hidden"></div></div></div>
+      <div class="modal-foot">${extraFoot}<button type="button" class="btn" data-close>Cancel</button>${onSubmit ? `<button type="submit" class="btn primary">${esc(submit)}</button>` : ""}</div>
+    </form></div>`;
+  document.body.appendChild(wrap);
+  const form = $("form", wrap);
+  wrap.addEventListener("mousedown", ev => { if (ev.target === wrap) closeModal(); });
+  $$("[data-close]", wrap).forEach(b => b.addEventListener("click", closeModal));
+  form.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const err = $(".form-error", wrap), btn = $('button[type="submit"]', wrap);
+    err.classList.add("hidden");
+    btn.disabled = true;
+    try { await onSubmit(form); closeModal(); }
+    catch (e) { err.textContent = e.message; err.classList.remove("hidden"); }
+    finally { btn.disabled = false; }
+  });
+  setTimeout(() => $("input:not([type=hidden]):not(.hidden), select", wrap)?.focus(), 30);
+  return form;
+}
+function closeModal() { $(".backdrop")?.remove(); }
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeModal(); });
+function confirmBox(title, text, okText = "Delete") {
+  return new Promise(resolve => {
+    modal(title, `<p style="margin:0">${text}</p>`, { submit: okText, onSubmit: async () => resolve(true) });
+    $$(".backdrop [data-close]").forEach(b => b.addEventListener("click", () => resolve(false)));
+    const btn = $('.backdrop button[type="submit"]'); if (btn) btn.classList.replace("primary", "danger");
+  });
+}
+
+function productForm(p) {
+  const def = `Default (every ${dur(S.settings.effective_default_interval)})`;
+  return modal(p ? "Edit product" : "Add a product", `
+    <label class="field"><span>Product name</span><input class="input" name="name" required value="${esc(p?.name || "")}" placeholder="e.g. NVIDIA RTX 5090"></label>
+    <div class="row2">
+      <label class="field"><span>Target price</span><input class="input" name="target_price" inputmode="decimal" value="${p?.target_price ?? ""}" placeholder="optional, e.g. 1999"><p class="hint">Alert when it's at or below this.</p></label>
+      <label class="field"><span>Max price</span><input class="input" name="max_price" inputmode="decimal" value="${p?.max_price ?? ""}" placeholder="optional"><p class="hint">Skip in-stock offers above this.</p></label>
+    </div>
+    <label class="field"><span>Refresh rate</span>${intervalSelect("interval", p?.interval_raw ?? "", def)}</label>
+    ${p ? `<label class="check"><input type="checkbox" name="enabled" ${p.enabled ? "checked" : ""}> <span>Tracking on</span></label>` : ""}`,
+  {
+    submit: p ? "Save" : "Add product",
+    onSubmit: async f => {
+      const body = { target_price: f.elements.target_price.value.trim(), max_price: f.elements.max_price.value.trim(), interval: readInterval(f, "interval") };
+      if (p) {
+        await act("/api/product/edit", { name: p.name, changes: { ...body, name: f.elements.name.value.trim(), enabled: f.elements.enabled.checked } }, "Product saved");
+      } else {
+        const name = f.elements.name.value.trim();
+        await act("/api/product/add", { name, ...body }, "Product added");
+        setTimeout(() => listingForm(name), 60);
+      }
+    },
+  });
+}
+
+function detectRetailer(url) {
+  const h = host(url);
+  if (!h) return null;
+  return (S.retailers || []).find(r => r.domains.some(d => h === d.replace(/^www\./, "") || h.endsWith("." + d.replace(/^www\./, "")))) || retailer("generic");
+}
+
+function listingForm(productName, l) {
+  const p = S.products.find(x => x.name === productName);
+  if (!p) return;
+  const f = modal(l ? "Edit listing" : `Add a listing for ${productName}`, `
+    <label class="field"><span>Product page URL</span><input class="input" name="url" type="url" value="${esc(l?.url || "")}" placeholder="https://www.store.com/product/..." autocomplete="off">
+      <div class="detected" id="detected"></div></label>
+    <div class="row2">
+      <label class="field"><span>Retailer</span><select class="input" name="retailer">${retailerOptions(l?.retailer_key && l.retailer_key !== "generic" ? l.retailer_key : "")}</select></label>
+      <label class="field"><span>Label</span><input class="input" name="label" value="${esc(l?.label || "")}" placeholder="optional, e.g. ASUS TUF OC"></label>
+    </div>
+    <div class="field hidden" id="storeField"><span>Store</span><div class="secret-row"><select class="input" name="store"></select><input class="input hidden" name="store_custom" placeholder="3-digit ID" style="max-width:120px"></div>
+      <p class="hint">This retailer's stock is per store.</p></div>
+    <label class="field hidden" id="skuField"><span>SKU</span><input class="input" name="sku" value="${esc(l?.sku || "")}" placeholder="e.g. 6614151"><p class="hint">Found in the URL automatically when possible (Best Buy: the skuId number).</p></label>
+    <label class="field hidden" id="variantField"><span>Variant</span><input class="input" name="variant" value="${esc(l?.variant || "")}" placeholder="optional variant id or name"></label>
+    <label class="field"><span>Refresh rate</span>${intervalSelect("interval", l?.interval_raw ?? "", `Same as product (every ${dur(p.interval)})`)}</label>
+    ${l ? `<label class="check"><input type="checkbox" name="enabled" ${l.enabled ? "checked" : ""}> <span>Tracking on</span></label>` : ""}
+    <div id="testOut"></div>`,
+  {
+    submit: l ? "Save" : "Add listing", wide: true,
+    extraFoot: `<button type="button" class="btn left" id="testBtn">${ICON.refresh}Test page</button>`,
+    onSubmit: async form => {
+      const v = values(form);
+      if (l) {
+        const changes = { url: v.url, retailer: form.elements.retailer.value, label: v.label, interval: v.interval, enabled: form.elements.enabled.checked };
+        if (!$("#storeField").classList.contains("hidden")) changes.store = v.store;
+        if (!$("#skuField").classList.contains("hidden")) changes.sku = v.sku;
+        if (!$("#variantField").classList.contains("hidden")) changes.variant = v.variant;
+        await act("/api/listing/edit", { product: productName, number: l.index, changes }, "Listing saved");
+      } else {
+        await act("/api/listing/add", { product: productName, ...v }, "Listing added. Checking it now…");
+      }
+    },
+  });
+  function values(form) {
+    const storeSel = form.elements.store.value;
+    return { url: form.elements.url.value.trim(), retailer: form.elements.retailer.value || null, label: form.elements.label.value.trim(),
+      sku: form.elements.sku.value.trim(), variant: form.elements.variant.value.trim(), interval: readInterval(form, "interval"),
+      store: storeSel === "custom" ? form.elements.store_custom.value.trim() : storeSel };
+  }
+  function update() {
+    const url = f.elements.url.value.trim();
+    const chosen = f.elements.retailer.value ? retailer(f.elements.retailer.value) : detectRetailer(url);
+    $("#detected").textContent = !f.elements.retailer.value && chosen && url ? `Detected: ${chosen.name}` : "";
+    $("#skuField").classList.toggle("hidden", !(chosen && chosen.type === "json_api"));
+    $("#variantField").classList.toggle("hidden", !(chosen && chosen.type === "shopify"));
+    const sf = $("#storeField");
+    if (chosen && chosen.uses_store) {
+      sf.classList.remove("hidden");
+      const sel = f.elements.store, prev = sel.dataset.r === chosen.key ? sel.value : (l?.store || "");
+      const ids = chosen.stores.map(s => s.name);
+      const known = !prev || ids.includes(prev) || chosen.stores.some(s => s.id === prev);
+      sel.innerHTML = `<option value="">${chosen.default_store_label ? `Retailer default: ${esc(chosen.default_store_label)}` : "No store (set a default under Retailers)"}</option>` +
+        chosen.stores.map(s => `<option value="${esc(s.name)}" ${prev === s.name || prev === s.id ? "selected" : ""}>${esc(s.name)} (${esc(s.id)})</option>`).join("") +
+        `<option value="custom" ${known ? "" : "selected"}>Other store ID…</option>`;
+      sel.dataset.r = chosen.key;
+      f.elements.store_custom.classList.toggle("hidden", sel.value !== "custom");
+      if (!known) f.elements.store_custom.value = prev;
+    } else sf.classList.add("hidden");
+  }
+  f.elements.url.addEventListener("input", update);
+  f.elements.retailer.addEventListener("change", update);
+  f.elements.store.addEventListener("change", () => f.elements.store_custom.classList.toggle("hidden", f.elements.store.value !== "custom"));
+  update();
+  $("#testBtn").addEventListener("click", async () => {
+    const v = values(f);
+    if (!v.url) { $("#testOut").innerHTML = `<div class="result err">Paste a product URL first.</div>`; return; }
+    $("#testOut").innerHTML = `<div class="result"><span><span class="pill busy">Testing…</span> Fetching the page once</span></div>`;
+    try { $("#testOut").innerHTML = testResultHtml(await api("/api/test-url", v)); }
+    catch (e) { $("#testOut").innerHTML = `<div class="result err">${esc(e.message)}</div>`; }
+  });
+}
+
+function retailerForm(r) {
+  const fv = k => esc(Array.isArray(r?.fields?.[k]) ? r.fields[k].join(", ") : (r?.fields?.[k] ?? ""));
+  const type = r?.type || "html";
+  const f = modal(r ? `Edit retailer: ${r.name}` : "Add a retailer", `
+    ${r && r.source !== "custom" ? `<p class="hint">This is built in. Your changes are saved on top of the built-in settings.</p>` : ""}
+    <div class="row3">
+      <label class="field"><span>Key</span><input class="input" name="key" value="${esc(r?.key || "")}" ${r ? "readonly" : ""} placeholder="e.g. newegg" pattern="[a-z0-9][a-z0-9_-]*"></label>
+      <label class="field"><span>Name</span><input class="input" name="name" value="${esc(r?.name || "")}" placeholder="e.g. Newegg"></label>
+      <label class="field"><span>Type</span><select class="input" name="type">${["html", "shopify", "json_api"].map(t => `<option value="${t}" ${t === type ? "selected" : ""}>${{ html: "Web page", shopify: "Shopify store", json_api: "JSON API" }[t]}</option>`).join("")}</select></label>
+    </div>
+    <label class="field"><span>Domains</span><input class="input" name="domains" value="${esc((r?.domains || []).join(", "))}" placeholder="e.g. newegg.com"><p class="hint">URLs on these sites use this retailer automatically. Separate several with commas.</p></label>
+    <fieldset class="group" data-for="html"><legend>Reading the page (optional)</legend>
+      <p class="hint" style="margin-top:-4px">Most shops work without these: the tracker reads the product data shops publish for Google. Fill them in only if <i>Test page</i> can't find the price or stock.</p>
+      <div class="row2">
+        <label class="field"><span>Price selector</span><input class="input" name="price_selector" value="${fv("price_selector")}" placeholder=".price-current"></label>
+        <label class="field"><span>Stock selector</span><input class="input" name="stock_selector" value="${fv("stock_selector")}" placeholder="#add-to-cart"></label>
+      </div>
+      <div class="row2">
+        <label class="field"><span>Words meaning in stock</span><input class="input" name="in_stock_text" value="${fv("in_stock_text")}" placeholder="Add to cart"></label>
+        <label class="field"><span>Words meaning sold out</span><input class="input" name="out_of_stock_text" value="${fv("out_of_stock_text")}" placeholder="Sold out, Out of stock"></label>
+      </div>
+    </fieldset>
+    <fieldset class="group hidden" data-for="json_api"><legend>API</legend>
+      <label class="field"><span>URL template</span><input class="input" name="url" value="${fv("url")}" placeholder="https://api.store.com/items/{sku}?key={api_key}"></label>
+      <label class="field"><span>API key</span><input class="input" type="password" name="api_key" autocomplete="off" placeholder="${r?.needs_api_key === false && r?.type === "json_api" ? "Saved or from environment. Leave blank to keep it" : "or ${ENV_VAR}"}"></label>
+      <div class="row2">
+        <label class="field"><span>Price field</span><input class="input" name="price_path" value="${fv("price_path")}" placeholder="data.price"></label>
+        <label class="field"><span>In-stock field</span><input class="input" name="in_stock_path" value="${fv("in_stock_path")}" placeholder="data.available"></label>
+      </div>
+      <div class="row3">
+        <label class="field"><span>Title field</span><input class="input" name="title_path" value="${fv("title_path")}"></label>
+        <label class="field"><span>Link field</span><input class="input" name="link_path" value="${fv("link_path")}"></label>
+        <label class="field"><span>SKU from URL (regex)</span><input class="input" name="sku_pattern" value="${fv("sku_pattern")}"></label>
+      </div>
+    </fieldset>
+    <div class="row2">
+      <label class="field"><span>Currency</span><input class="input" name="currency" value="${fv("currency")}" placeholder="USD"></label>
+      <label class="field"><span>Seconds between requests</span><input class="input" name="min_delay" value="${fv("min_delay")}" placeholder="uses the global setting"></label>
+    </div>`,
+  {
+    submit: r ? "Save" : "Add retailer", wide: true,
+    onSubmit: async form => {
+      const names = ["name", "type", "domains", "price_selector", "stock_selector", "in_stock_text", "out_of_stock_text", "url", "price_path", "in_stock_path", "title_path", "link_path", "sku_pattern", "currency", "min_delay"];
+      const fields = {};
+      for (const n of names) {
+        const val = form.elements[n].value.trim();
+        const before = n === "domains" ? (r?.domains || []).join(", ") : n === "name" ? (r?.name || "") : n === "type" ? (r?.type || "") : (Array.isArray(r?.fields?.[n]) ? r.fields[n].join(", ") : String(r?.fields?.[n] ?? ""));
+        if (!r || val !== before) fields[n] = val;
+      }
+      if (form.elements.api_key.value.trim()) fields.api_key = form.elements.api_key.value.trim();
+      const key = form.elements.key.value.trim().toLowerCase();
+      if (!key) throw new Error("Give the retailer a short key, like newegg.");
+      await act("/api/retailer/save", { key, fields }, r ? "Retailer saved" : "Retailer added");
+    },
+  });
+  const sync = () => $$("fieldset[data-for]", f).forEach(fs => fs.classList.toggle("hidden", fs.dataset.for !== f.elements.type.value));
+  f.elements.type.addEventListener("change", sync);
+  sync();
+}
+
+function storeForm(r) {
+  modal(`${r.name}: default store`, `
+    <label class="field"><span>Store</span><select class="input" name="store">
+      <option value="">No default store</option>
+      ${r.stores.map(s => `<option value="${esc(s.name)}" ${s.id === r.default_store ? "selected" : ""}>${esc(s.name)} (${esc(s.id)})</option>`).join("")}
+      <option value="custom" ${r.default_store && !r.stores.some(s => s.id === r.default_store) ? "selected" : ""}>Other store ID…</option></select></label>
+    <label class="field"><span>Store ID</span><input class="input" name="custom" placeholder="only for Other, e.g. 205" value="${r.default_store && !r.stores.some(s => s.id === r.default_store) ? esc(r.default_store) : ""}"></label>
+    <p class="hint">Every ${esc(r.name)} listing uses this store unless the listing picks its own. Each store keeps its own price history.</p>`,
+  {
+    submit: "Save store",
+    onSubmit: async f => {
+      const v = f.elements.store.value === "custom" ? f.elements.custom.value.trim() : f.elements.store.value;
+      await act("/api/retailer/save", { key: r.key, fields: { store: v } }, "Store saved");
+    },
+  });
+}
+
+// ---------------------------------------------------------------- tick (relative times, countdowns)
+function tick() {
+  $$("[data-ts]").forEach(el => { el.textContent = ago(el.dataset.ts); });
+  $$("[data-due]").forEach(el => { const s = (Number(el.dataset.due) - Date.now()) / 1000; el.textContent = s > 1 ? "in " + dur(s) : "soon"; });
+}
+setInterval(tick, 1000);
+
+// ---------------------------------------------------------------- events
+function showTab(name) {
+  tab = name;
+  $$(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false"));
+  $$("main > section").forEach(s => s.classList.toggle("hidden", s.id !== "tab-" + name));
+  if (name === "activity") { unseenAlerts = 0; updateBadge(); }
+  if (name === "settings") renderBrowser();
+  if (name === "dashboard") { for (const n of openCharts) { const el = $(`[data-chart="${CSS.escape(n)}"]`); if (el && chartData[n]) drawChart(el, chartData[n]); } }
+  lsSet("tab", name);
+}
+$$(".tab").forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
+$("#watchToggle").addEventListener("click", () => act("/api/watch", { on: !S?.monitor?.watching }).catch(() => {}));
+
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest("[data-action]");
+  if (!b) {
+    if (!ev.target.closest("details.menu")) $$("details.menu[open]").forEach(d => d.removeAttribute("open"));
+    return;
+  }
+  const a = b.dataset.action, name = b.dataset.product;
+  if (b.tagName === "A") ev.preventDefault();
+  b.closest("details.menu")?.removeAttribute("open");
+  const product = name && S.products.find(p => p.name === name);
+  try {
+    if (a === "add-product") productForm();
+    else if (a === "edit-product") productForm(product);
+    else if (a === "add-listing") listingForm(name);
+    else if (a === "edit-listing") listingForm(name, product.listings.find(l => l.index === Number(b.dataset.number)));
+    else if (a === "check-all") await act("/api/check", {}, "Checking everything now");
+    else if (a === "check-product") await act("/api/check", { product: name });
+    else if (a === "check-listing") await act("/api/check", { keys: [b.closest(".listing").dataset.key] });
+    else if (a === "toggle-product") await act("/api/product/edit", { name, changes: { enabled: b.dataset.enabled !== "true" } }, b.dataset.enabled === "true" ? "Paused" : "Resumed");
+    else if (a === "remove-product") { if (await confirmBox("Delete product?", `Stop tracking <b>${esc(name)}</b>? Its price history stays in the database.`)) await act("/api/product/remove", { name }, "Product deleted"); }
+    else if (a === "remove-listing") { const l = product.listings.find(x => x.index === Number(b.dataset.number)); if (await confirmBox("Remove listing?", `Stop tracking <b>${esc(name)}</b> at <b>${esc(l.retailer_name)}</b>${l.store_label ? ` (${esc(l.store_label)})` : ""}?`, "Remove")) await act("/api/listing/remove", { product: name, number: l.index }, "Listing removed"); }
+    else if (a === "chart") {
+      if (openCharts.has(name)) openCharts.delete(name); else openCharts.add(name);
+      lsSet("openCharts", [...openCharts]); sigs.dash = ""; render();
+    }
+    else if (a === "add-retailer") retailerForm();
+    else if (a === "edit-retailer") retailerForm(retailer(b.dataset.key));
+    else if (a === "set-store") storeForm(retailer(b.dataset.key));
+    else if (a === "remove-retailer") { if (await confirmBox("Remove retailer?", `Remove <b>${esc(b.dataset.key)}</b>? Listings that matched it by domain go back to the generic reader.`, "Remove")) await act("/api/retailer/remove", { key: b.dataset.key }, "Retailer removed"); }
+    else if (a === "test-notify") {
+      const out = $("#notifyResult"); out.innerHTML = `<div class="result"><span class="pill busy">Sending…</span></div>`;
+      const r = await api("/api/test-notify", {});
+      out.innerHTML = `<div class="result">${Object.entries(r.results).map(([k, e]) => `<div><b>${esc(k)}</b>: ${e ? `<span style="color:var(--bad)">failed: ${esc(e)}</span>` : '<span style="color:var(--ok)">sent</span>'}</div>`).join("")}</div>`;
+    }
+    else if (a === "ask-notify") { await Notification.requestPermission(); renderBrowser(); }
+  } catch { /* act() already showed a toast */ }
+});
+
+$("#tryForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const f = ev.target, out = $("#tryResult");
+  out.innerHTML = `<div class="result"><span><span class="pill busy">Testing…</span> Fetching the page once</span></div>`;
+  try { out.innerHTML = testResultHtml(await api("/api/test-url", { url: f.elements.url.value.trim(), retailer: f.elements.retailer.value || null })); }
+  catch (e) { out.innerHTML = `<div class="result err">${esc(e.message)}</div>`; }
+});
+let resizeTimer;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { for (const n of openCharts) { const el = $(`[data-chart="${CSS.escape(n)}"]`); if (el && chartData[n]) drawChart(el, chartData[n]); } }, 150); });
+
+applyTheme();
+refresh().then(() => { showTab(lsGet("tab", "dashboard")); poll(); });
+</script>
+</body>
+</html>

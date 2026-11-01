@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +18,8 @@ from .config import (
     Config,
     ConfigError,
     Listing,
-    Product,
+    TEXT_SETTINGS,
+    coerce_value,
     expand_env,
     format_duration,
     parse_duration,
@@ -148,21 +148,7 @@ def duration_arg(value: str) -> str | float:
     return value
 
 
-def _scalar(value: str) -> Any:
-    """Turn a CLI string into int/float/bool when it clearly is one."""
-    low = value.strip().lower()
-    if re.fullmatch(r"0\d+", low):  # IDs like "025" stay text
-        return value.strip()
-    if low in ("true", "yes", "on"):
-        return True
-    if low in ("false", "no", "off"):
-        return False
-    for cast in (int, float):
-        try:
-            return cast(value)
-        except ValueError:
-            pass
-    return value
+_scalar = coerce_value
 
 
 def outcome_details(out: Outcome) -> str:
@@ -422,7 +408,7 @@ def cmd_settings(args: argparse.Namespace) -> int:
         print(cfg.raw["settings"].get(args.key, DEFAULT_SETTINGS.get(args.key, "(unknown setting)")))
         return 0
     # Numbers and booleans become numbers/booleans; durations like "2m" stay text.
-    value: Any = args.value if args.key in ("user_agent", "database", "currency") else _scalar(args.value)
+    value: Any = args.value if args.key in TEXT_SETTINGS else _scalar(args.value)
     cfg.set_setting(args.key, value)
     cfg.save()
     print(f"{args.key} = {value}")
@@ -494,24 +480,30 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gui(args: argparse.Namespace) -> int:
+    from .gui import serve
+
+    path = config_path(args)
+    if not path.exists():
+        Config.from_file_as(EXAMPLE_CONFIG, path).save()
+        print(f"Created {path} from the example config")
+    for w in Config.load(path).warnings:
+        log.warning("%s", w)
+
+    def on_outcome(o: Outcome) -> None:
+        if not args.quiet or o.alert or o.status != "ok":
+            print(_run_line(o), flush=True)
+
+    serve(path, port=args.port, open_browser=not args.no_browser, watching=not args.paused, on_outcome=on_outcome)
+    return 0
+
+
 def cmd_test_url(args: argparse.Namespace) -> int:
     path = config_path(args)
     cfg = Config.load(path) if path.exists() else Config(path, {})
-    key = args.retailer or cfg.retailer_for_url(args.url)
-    retailers = cfg.retailers_raw()
-    if key not in retailers:
-        raise ConfigError(f"unknown retailer {key!r} (known: {', '.join(retailers)})")
     overrides = _retailer_fields(args)
-    raw = {**retailers[key], **overrides}
-    sku = args.sku
-    if not sku and raw.get("sku_pattern"):
-        m = re.search(str(raw["sku_pattern"]), args.url)
-        sku = (next((g for g in m.groups() if g), None) or m.group(0)) if m else None
-    fields = {k: v for k, v in {"url": args.url, "sku": sku, "variant": args.variant, "store": args.store}.items() if v}
-    retailer = expand_env(raw)
-    store_id = resolve_store(retailer, args.store or retailer.get("store")) if uses_store(retailer) else None
-    listing = Listing(product=Product(name="(test)"), index=1, retailer_key=key, retailer=retailer,
-                      retailer_raw=raw, fields=fields, interval=0, store_id=store_id)
+    listing = cfg.adhoc_listing(args.url, args.retailer, args.sku, args.variant, args.store, overrides)
+    key, raw, retailer, store_id = listing.retailer_key, listing.retailer_raw, listing.retailer, listing.store_id
     print(f"Retailer:  {listing.retailer_name} [{key}], type {raw.get('type', 'html')}")
     if uses_store(retailer):
         print(f"Store:     {store_label(retailer, store_id) or S.yellow('none set (pass --store, see `stores`)')}")
@@ -673,6 +665,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = add("run", cmd_run, "keep checking on each listing's refresh rate; alert on changes")
     p.add_argument("--product", help="only this product")
     p.add_argument("-q", "--quiet", action="store_true", help="only print alerts, errors and blocks")
+
+    p = add("gui", cmd_gui, "open the web dashboard (also runs the tracker while it's open)")
+    p.add_argument("--port", type=int, default=8765, help="local port (default 8765; the next free one is used)")
+    p.add_argument("--no-browser", action="store_true", help="don't open a browser window")
+    p.add_argument("--paused", action="store_true", help="start with automatic checking off")
+    p.add_argument("-q", "--quiet", action="store_true", help="only print alerts and problems in the terminal")
 
     p = add("add-product", cmd_add_product, "start tracking a new product")
     p.add_argument("name")

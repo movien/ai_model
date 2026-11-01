@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
 if TYPE_CHECKING:
+    from .alerts import Alert
     from .config import Listing
     from .extract import Result
 
@@ -29,6 +30,19 @@ CREATE TABLE IF NOT EXISTS checks (
     error        TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_checks_listing ON checks (listing_key, id);
+CREATE TABLE IF NOT EXISTS alerts (
+    id           INTEGER PRIMARY KEY,
+    listing_key  TEXT NOT NULL,
+    product      TEXT NOT NULL,
+    retailer     TEXT NOT NULL,
+    ts           TEXT NOT NULL,
+    kinds        TEXT NOT NULL,      -- comma separated: in_stock,target,price_drop
+    title        TEXT NOT NULL,
+    message      TEXT NOT NULL,
+    url          TEXT,
+    price        REAL,
+    currency     TEXT
+);
 """
 
 
@@ -44,8 +58,12 @@ class Store:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        self.conn = sqlite3.connect(self.path, timeout=15)
         self.conn.row_factory = sqlite3.Row
+        try:  # lets the GUI read while the tracker writes
+            self.conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.DatabaseError:
+            pass
         self.conn.executescript(SCHEMA)
 
     def close(self) -> None:
@@ -79,6 +97,27 @@ class Store:
             ),
         )
         self.conn.commit()
+
+    def record_alert(self, listing: Listing, alert: Alert, ts: str | None = None) -> None:
+        self.conn.execute(
+            "INSERT INTO alerts (listing_key, product, retailer, ts, kinds, title, message, url, price, currency)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (listing.key, listing.product.name, listing.retailer_name, ts or utcnow(), ",".join(alert.kinds),
+             alert.title, alert.message, alert.url, alert.data.get("price"), alert.data.get("currency")),
+        )
+        self.conn.commit()
+
+    def recent_alerts(self, limit: int = 30) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+    def price_points(self, key: str, limit: int = 300) -> list[dict[str, Any]]:
+        """Oldest-first points where price or stock changed, plus the latest check (for charts)."""
+        points = [dict(r) for r in reversed(self.changes(key, limit))]
+        last = self.last_ok(key)
+        if last is not None and (not points or points[-1]["ts"] != last["ts"]):
+            points.append({"ts": last["ts"], "price": last["price"], "currency": last["currency"],
+                           "in_stock": last["in_stock"]})
+        return [{"ts": p["ts"], "price": p["price"], "in_stock": p["in_stock"]} for p in points]
 
     def last_ok(self, key: str) -> sqlite3.Row | None:
         return self.conn.execute(
