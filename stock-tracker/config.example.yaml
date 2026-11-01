@@ -65,11 +65,11 @@ retailers:
   bestbuy:
     api_key: "${BESTBUY_API_KEY}"
 
-  # Built-in Micro Center. Stock is per store, so set your store: a name such as tustin, dallas,
-  # st-davids (list them with `python tracker.py stores`) or a 3-digit ID in quotes, e.g. "101".
+  # Built-in Micro Center. Stock is per store: a name such as phoenix, tustin, st-davids (list
+  # them with `python tracker.py stores`) or a 3-digit ID in quotes, e.g. "205".
   # A listing can use another store with its own `store:`.
   microcenter:
-    store: ""
+    store: phoenix                      # 4531 E Thomas Rd, Phoenix, AZ (store 205)
 
   # Example custom HTML retailer. Every field is optional except `type`.
   newegg:

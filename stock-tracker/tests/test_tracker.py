@@ -602,6 +602,7 @@ class TestMicroCenter(unittest.TestCase):
         self.assertEqual(resolve_store(mc, "tustin"), "101")
         self.assertEqual(resolve_store(mc, "St. Davids"), "061")
         self.assertEqual(resolve_store(mc, "Mayfield Heights"), "051")
+        self.assertEqual(resolve_store(mc, "Phoenix"), "205")
         self.assertEqual(resolve_store(mc, "201"), "201")  # a store newer than the built-in list
         self.assertEqual(resolve_store(mc, 101), "101")
         self.assertEqual(resolve_store(mc, 25), "025")

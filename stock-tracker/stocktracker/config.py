@@ -33,15 +33,15 @@ DURATION_SETTINGS = ("default_interval", "min_interval", "per_host_delay", "time
 RETAILER_TYPES = ("html", "shopify", "json_api")
 
 # Micro Center store IDs (the `storeid=` URL parameter). Stock at Micro Center is per store.
-# Source: the open-source streetmerchant project; stores opened since may be missing, in which
-# case use the 3-digit ID from the store's page on microcenter.com.
+# Source: the open-source streetmerchant project, plus Phoenix (opened Nov 2025; ID seen on
+# Micro Center's cart page). Other new stores may be missing: use their 3-digit ID directly.
 MICROCENTER_STORES: dict[str, str] = {
     "web": "029",  # shippable items only
     "brentwood": "095", "brooklyn": "115", "cambridge": "121", "charlotte": "175",
     "chicago": "151", "columbus": "141", "dallas": "131", "denver": "181", "duluth": "065",
     "fairfax": "081", "flushing": "145", "houston": "155", "madison-heights": "055",
     "marietta": "041", "mayfield-heights": "051", "miami": "185", "north-jersey": "075",
-    "overland-park": "191", "parkville": "125", "rockville": "085", "sharonville": "071",
+    "overland-park": "191", "parkville": "125", "phoenix": "205", "rockville": "085", "sharonville": "071",
     "st-davids": "061", "st-louis-park": "045", "tustin": "101", "westbury": "171",
     "westmont": "025", "yonkers": "105",
 }

@@ -47,7 +47,8 @@ reloads it automatically. All options are documented in [`config.example.yaml`](
    ```
 
 2. **Micro Center.** The starter config already tracks four RTX 5090 models there. Micro Center
-   stock is **per store**, so set your store once (by name or 3-digit ID):
+   stock is **per store**. The starter config uses the **Phoenix** store (ID 205). To change it,
+   set another store by name or 3-digit ID:
 
    ```bash
    python tracker.py stores                                  # list store names and IDs
@@ -170,8 +171,8 @@ products:
 ```
 
 Write numeric IDs in quotes (`"025"`). Unquoted, YAML reads `025` as an octal number. The store list
-comes from the open-source [streetmerchant](https://github.com/jef/streetmerchant) project, so newer
-stores may be missing; use their 3-digit ID directly. Your own retailers can do the same with
+comes from the open-source [streetmerchant](https://github.com/jef/streetmerchant) project, plus
+Phoenix (205). Other newer stores may be missing; use their 3-digit ID directly. Your own retailers can do the same with
 `url_params: {storeid: "{store}"}` and an optional `stores:` name-to-ID map.
 
 The Micro Center page reading (price in `span#pricing`, stock text in `#pnlInventory`) also follows
