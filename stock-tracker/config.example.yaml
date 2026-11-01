@@ -48,7 +48,8 @@ notifications:
     url: ""                   # POSTs JSON to any URL (Home Assistant, Zapier, n8n, ...)
 
 # ---------------------------------------------------------------------------------------------
-# Retailers: how to read a store. Built in (no need to define): generic, shopify, bestbuy.
+# Retailers: how to read a store. Built in (no need to define): generic, shopify, bestbuy,
+# microcenter.
 #
 #   type: html      any product page. The tracker first reads the page's schema.org product
 #                   data (most shops publish it for Google), then the options below.
@@ -63,6 +64,12 @@ retailers:
   # (or replace the value below with the key itself).
   bestbuy:
     api_key: "${BESTBUY_API_KEY}"
+
+  # Built-in Micro Center. Stock is per store, so set your store: a name such as tustin, dallas,
+  # st-davids (list them with `python tracker.py stores`) or a 3-digit ID in quotes, e.g. "101".
+  # A listing can use another store with its own `store:`.
+  microcenter:
+    store: ""
 
   # Example custom HTML retailer. Every field is optional except `type`.
   newegg:
@@ -80,6 +87,8 @@ retailers:
     # min_delay: 10                     # seconds between requests to this site
     # user_agent: "..."                 # per-site User-Agent
     # headers: {Accept-Language: en-US}
+    # url_params: {storeid: "{store}"}  # add query parameters; {fields} come from the listing
+    # stores: {downtown: "12"}          #   or retailer, and `store:` names map to these IDs
 
   # Example JSON API retailer (any API that returns JSON):
   # mystore:
@@ -105,7 +114,8 @@ retailers:
 #   enabled        false pauses the product
 #
 # Listing fields: url, retailer (default: picked by the URL's domain, else generic), sku (API
-# retailers), variant (Shopify variant id or name), label (a note), interval, enabled.
+# retailers), variant (Shopify variant id or name), store (Micro Center), label (a note),
+# interval, enabled.
 # ---------------------------------------------------------------------------------------------
 products:
   - name: NVIDIA RTX 5090
@@ -116,6 +126,15 @@ products:
       - retailer: bestbuy
         sku: "6614151"                  # the skuId=... number in the Best Buy product URL
         label: Founders Edition
+      - url: https://www.microcenter.com/product/690450/gigabyte-nvidia-geforce-rtx-5090-windforce-overclocked-triple-fan-32gb-gddr7-pcie-50-graphics-card
+        label: Gigabyte Windforce OC
+      - url: https://www.microcenter.com/product/690483/pny-nvidia-geforce-rtx-5090-overclocked-triple-fan-32gb-gddr7-pcie-50-graphics-card
+        label: PNY OC
+      - url: https://www.microcenter.com/product/690491/msi-nvidia-geforce-rtx-5090-ventus-3x-overclocked-triple-fan-32gb-gddr7-pcie-50-graphics-card
+        label: MSI Ventus 3X OC
+      - url: https://www.microcenter.com/product/697399/zotac-nvidia-geforce-rtx-5090-solid-triple-fan-32gb-gddr7-pcie-50-graphics-card
+        label: Zotac SOLID
+        # store: dallas                 # this listing only: check a different store
       # Paste product page URLs from any store:
       # - url: https://www.newegg.com/p/N82E168...
       # - url: https://www.bhphotovideo.com/c/product/...

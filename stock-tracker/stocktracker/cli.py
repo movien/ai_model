@@ -23,6 +23,9 @@ from .config import (
     expand_env,
     format_duration,
     parse_duration,
+    resolve_store,
+    store_label,
+    uses_store,
 )
 from .engine import Outcome, Tracker
 from .extract import ExtractError, extract, parse_price
@@ -148,6 +151,8 @@ def duration_arg(value: str) -> str | float:
 def _scalar(value: str) -> Any:
     """Turn a CLI string into int/float/bool when it clearly is one."""
     low = value.strip().lower()
+    if re.fullmatch(r"0\d+", low):  # IDs like "025" stay text
+        return value.strip()
     if low in ("true", "yes", "on"):
         return True
     if low in ("false", "no", "off"):
@@ -278,7 +283,7 @@ def cmd_add_product(args: argparse.Namespace) -> int:
 def cmd_add_listing(args: argparse.Namespace) -> int:
     cfg = load_config(args)
     _, key = cfg.add_listing(args.product, url=args.url, retailer=args.retailer, sku=args.sku,
-                             variant=args.variant, interval=args.interval, label=args.label)
+                             variant=args.variant, interval=args.interval, label=args.label, store=args.store)
     cfg.save()
     raw = cfg.find_product_raw(args.product)
     product = next(p for p in cfg.products(include_disabled=True) if p.name == raw["name"])
@@ -502,10 +507,14 @@ def cmd_test_url(args: argparse.Namespace) -> int:
     if not sku and raw.get("sku_pattern"):
         m = re.search(str(raw["sku_pattern"]), args.url)
         sku = (next((g for g in m.groups() if g), None) or m.group(0)) if m else None
-    fields = {k: v for k, v in {"url": args.url, "sku": sku, "variant": args.variant}.items() if v}
-    listing = Listing(product=Product(name="(test)"), index=1, retailer_key=key, retailer=expand_env(raw),
-                      retailer_raw=raw, fields=fields, interval=0)
+    fields = {k: v for k, v in {"url": args.url, "sku": sku, "variant": args.variant, "store": args.store}.items() if v}
+    retailer = expand_env(raw)
+    store_id = resolve_store(retailer, args.store or retailer.get("store")) if uses_store(retailer) else None
+    listing = Listing(product=Product(name="(test)"), index=1, retailer_key=key, retailer=retailer,
+                      retailer_raw=raw, fields=fields, interval=0, store_id=store_id)
     print(f"Retailer:  {listing.retailer_name} [{key}], type {raw.get('type', 'html')}")
+    if uses_store(retailer):
+        print(f"Store:     {store_label(retailer, store_id) or S.yellow('none set (pass --store, see `stores`)')}")
     try:
         res = extract(listing, Fetcher(cfg.settings))
     except BlockedError as e:
@@ -528,6 +537,26 @@ def cmd_test_url(args: argparse.Namespace) -> int:
         print(S.dim("here, then save what works with:  python tracker.py add-retailer <key> --domain <site> [same options]"))
     elif overrides:
         print(S.dim("\nWorks. Save it with:  python tracker.py add-retailer <key> --domain <site> [the same options]"))
+    return 0
+
+
+def cmd_stores(args: argparse.Namespace) -> int:
+    path = config_path(args)
+    cfg = Config.load(path) if path.exists() else Config(path, {})
+    retailers = {k: r for k, r in cfg.retailers_raw().items() if uses_store(r)}
+    if args.retailer:
+        if args.retailer not in retailers:
+            raise ConfigError(f"{args.retailer!r} doesn't use stores. Retailers with stores: {', '.join(retailers) or 'none'}")
+        retailers = {args.retailer: retailers[args.retailer]}
+    for key, r in retailers.items():
+        default = resolve_store(expand_env(r), expand_env(r.get("store")))
+        print(f"{S.bold(r.get('name', key))} [{key}]  default store: {store_label(r, default) or S.yellow('not set')}")
+        rows = [[name, sid, S.green("<- default") if sid == default else ""] for name, sid in (r.get("stores") or {}).items()]
+        if rows:
+            print_table(["STORE", "ID", ""], rows, indent="  ")
+        print(S.dim(f"\n  Set the default:      python tracker.py add-retailer {key} --set store=<name or ID>"))
+        print(S.dim("  Or per listing:       python tracker.py add-listing <product> <url> --store <name or ID>"))
+        print(S.dim("  A store missing here? Use its 3-digit ID from the store page on the retailer's site.\n"))
     return 0
 
 
@@ -662,6 +691,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--variant", help="Shopify variant id or name, e.g. 'OC Edition'")
     p.add_argument("--interval", type=duration_arg, help="refresh rate just for this listing")
     p.add_argument("--label", help="a note shown in `list`, e.g. 'ASUS Astral OC'")
+    p.add_argument("--store", help="store name or ID for retailers with per-store stock (Micro Center)")
     p.add_argument("--no-test", action="store_true", help="don't fetch the listing once to verify it")
 
     p = add("edit-product", cmd_edit_product, "change a product's prices, refresh rate, name, or pause it")
@@ -716,7 +746,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--retailer", help="retailer key to use (default: detect from the domain)")
     p.add_argument("--sku")
     p.add_argument("--variant")
+    p.add_argument("--store", help="store name or ID (Micro Center)")
     _add_html_options(p)
+
+    p = add("stores", cmd_stores, "list store names/IDs for retailers with per-store stock (Micro Center)")
+    p.add_argument("retailer", nargs="?")
 
     p = add("history", cmd_history, "price history: lows, highs, last time in stock, changes")
     p.add_argument("product", nargs="?")

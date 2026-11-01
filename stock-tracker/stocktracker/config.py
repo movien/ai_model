@@ -32,6 +32,20 @@ DURATION_SETTINGS = ("default_interval", "min_interval", "per_host_delay", "time
 
 RETAILER_TYPES = ("html", "shopify", "json_api")
 
+# Micro Center store IDs (the `storeid=` URL parameter). Stock at Micro Center is per store.
+# Source: the open-source streetmerchant project; stores opened since may be missing, in which
+# case use the 3-digit ID from the store's page on microcenter.com.
+MICROCENTER_STORES: dict[str, str] = {
+    "web": "029",  # shippable items only
+    "brentwood": "095", "brooklyn": "115", "cambridge": "121", "charlotte": "175",
+    "chicago": "151", "columbus": "141", "dallas": "131", "denver": "181", "duluth": "065",
+    "fairfax": "081", "flushing": "145", "houston": "155", "madison-heights": "055",
+    "marietta": "041", "mayfield-heights": "051", "miami": "185", "north-jersey": "075",
+    "overland-park": "191", "parkville": "125", "rockville": "085", "sharonville": "071",
+    "st-davids": "061", "st-louis-park": "045", "tustin": "101", "westbury": "171",
+    "westmont": "025", "yonkers": "105",
+}
+
 # Retailers that work without being defined in the config file. A `retailers:` entry with the
 # same key is merged on top, e.g. `bestbuy: {api_key: "..."}` only sets the key.
 BUILTIN_RETAILERS: dict[str, dict[str, Any]] = {
@@ -59,6 +73,20 @@ BUILTIN_RETAILERS: dict[str, dict[str, Any]] = {
         "link_path": "url",
         "currency": "USD",
         "min_delay": 1,
+    },
+    "microcenter": {
+        "name": "Micro Center",
+        "type": "html",
+        "domains": ["microcenter.com"],
+        "price_selector": "span#pricing",
+        "stock_selector": "#pnlInventory",
+        "in_stock_text": ["in stock"],
+        "out_of_stock_text": ["sold out", "out of stock"],
+        "url_params": {"storeid": "{store}"},
+        "stores": MICROCENTER_STORES,
+        "store": "",  # default store for every Micro Center listing; a listing's `store:` wins
+        "currency": "USD",
+        "min_delay": 10,
     },
 }
 
@@ -124,6 +152,46 @@ def env_vars_in(value: Any) -> list[str]:
     return _ENV_RE.findall(value) if isinstance(value, str) else []
 
 
+def _norm_store(value: Any) -> str:
+    return re.sub(r"[\s_.]+", "-", str(value).strip().lower()).strip("-")
+
+
+def resolve_store(retailer: dict[str, Any], value: Any) -> str | None:
+    """A store name ("tustin", "St. Davids") or ID ("101") -> the retailer's store ID."""
+    if value is None or value == "":
+        return None
+    name = retailer.get("name", "this retailer")
+    stores = {_norm_store(k): str(v) for k, v in (retailer.get("stores") or {}).items()}
+    if isinstance(value, bool):
+        raise ConfigError(f"store must be a store name or ID, got {value!r}")
+    if isinstance(value, int):
+        padded = f"{value:03d}"
+        if not stores or padded in stores.values():
+            return padded if stores else str(value)
+        raise ConfigError(
+            f"{value} isn't a known {name} store ID. Put IDs in quotes (store: \"025\"), because YAML reads "
+            f"025 as an octal number, or use the store name"
+        )
+    text = str(value).strip()
+    if _norm_store(text) in stores:
+        return stores[_norm_store(text)]
+    if text.isdigit():
+        return text
+    known = ", ".join(sorted(stores)) or "(none listed)"
+    raise ConfigError(f"unknown {name} store {value!r}. Use a store ID or one of: {known}")
+
+
+def store_label(retailer: dict[str, Any], store_id: str | None) -> str | None:
+    if not store_id:
+        return None
+    names = [k for k, v in (retailer.get("stores") or {}).items() if str(v) == store_id]
+    return f"{names[0]} ({store_id})" if names else store_id
+
+
+def uses_store(retailer: dict[str, Any]) -> bool:
+    return bool(retailer.get("stores")) or any("{store}" in str(v) for v in (retailer.get("url_params") or {}).values())
+
+
 def _opt_price(value: Any, what: str) -> float | None:
     if value is None or value == "":
         return None
@@ -158,6 +226,7 @@ class Listing:
     fields: dict[str, Any]  # the listing's own fields (url, sku, variant, ...), expanded
     interval: float
     enabled: bool = True
+    store_id: str | None = None  # resolved store (listing's `store:` or the retailer default)
 
     @property
     def url(self) -> str | None:
@@ -176,9 +245,10 @@ class Listing:
     def key(self) -> str:
         """Stable id for price history. Independent of the product name, so renames keep history."""
         f = self.fields
-        return "|".join(
+        key = "|".join(
             [self.retailer_key, str(f.get("url") or ""), str(f.get("sku") or ""), str(f.get("variant") or "")]
         )
+        return f"{key}|store={self.store_id}" if self.store_id else key
 
     @property
     def label(self) -> str:
@@ -195,6 +265,9 @@ class Listing:
             parts.append(f"sku {f['sku']}")
         if f.get("variant"):
             parts.append(f"variant {f['variant']}")
+        if self.store_id:
+            default = "" if f.get("store") else ", default"
+            parts.insert(0, f"[store {store_label(self.retailer, self.store_id)}{default}]")
         return "  ".join(parts)
 
 
@@ -382,16 +455,19 @@ class Config:
             for i, l in enumerate(p.get("listings") or [], 1):
                 rkey = self.resolve_retailer(l)
                 interval = parse_duration(l.get("interval") or prod_interval or settings["default_interval"])
+                rexp = expand_env(retailers[rkey])
+                store_id = resolve_store(rexp, expand_env(l.get("store") or rexp.get("store"))) if uses_store(rexp) else None
                 prod.listings.append(
                     Listing(
                         product=prod,
                         index=i,
                         retailer_key=rkey,
-                        retailer=expand_env(retailers[rkey]),
+                        retailer=rexp,
                         retailer_raw=retailers[rkey],
                         fields=expand_env(dict(l)),
                         interval=max(interval, settings["min_interval"]),
                         enabled=l.get("enabled", True) is not False,
+                        store_id=store_id,
                     )
                 )
             if include_disabled or prod.enabled:
@@ -480,6 +556,7 @@ class Config:
         variant: str | None = None,
         interval: Any = None,
         label: str | None = None,
+        store: str | None = None,
     ) -> tuple[dict[str, Any], str]:
         p = self.find_product_raw(product)
         retailers = self.retailers_raw()
@@ -505,6 +582,11 @@ class Config:
             listing["sku"] = str(sku)
         if variant:
             listing["variant"] = str(variant)
+        if store:
+            if not uses_store(r):
+                raise ConfigError(f"{r.get('name', key)} doesn't use stores")
+            resolve_store(r, store)
+            listing["store"] = str(store)
         if label:
             listing["label"] = label
         if interval is not None:
@@ -512,7 +594,9 @@ class Config:
             listing["interval"] = interval
 
         def ident(l: dict[str, Any]) -> tuple:
-            return (self.resolve_retailer(l), l.get("url"), str(l.get("sku") or ""), str(l.get("variant") or ""))
+            rk = self.resolve_retailer(l)
+            store_id = resolve_store(retailers[rk], l.get("store") or retailers[rk].get("store")) if uses_store(retailers[rk]) else None
+            return (rk, l.get("url"), str(l.get("sku") or ""), str(l.get("variant") or ""), store_id)
 
         if any(ident(l) == ident(listing) for l in p["listings"]):
             raise ConfigError(f"that listing is already tracked for {p['name']!r}")
@@ -573,6 +657,14 @@ class Config:
             for lst in ("domains", "in_stock_text", "out_of_stock_text"):
                 if lst in merged and not isinstance(merged[lst], list):
                     errors.append(f"{where}.{lst} must be a list, e.g. [\"Sold out\"]")
+            for mapping in ("url_params", "stores", "headers"):
+                if mapping in merged and not isinstance(merged[mapping], dict):
+                    errors.append(f"{where}.{mapping} must be a mapping")
+            if merged.get("store") and isinstance(merged.get("stores", {}), dict):
+                try:
+                    resolve_store(expand_env(merged), expand_env(merged["store"]))
+                except ConfigError as e:
+                    errors.append(f"{where}.store: {e}")
             if merged.get("sku_pattern"):
                 try:
                     re.compile(str(merged["sku_pattern"]))
@@ -585,6 +677,7 @@ class Config:
                     errors.append(f"{where}.price_regex: invalid regex: {e}")
 
         seen: set[str] = set()
+        storeless: dict[str, int] = {}
         for i, p in enumerate(raw["products"], 1):
             where = f"products #{i}"
             if not isinstance(p, dict) or not str(p.get("name") or "").strip():
@@ -634,6 +727,23 @@ class Config:
                         parse_duration(l["interval"])
                     except ConfigError as e:
                         errors.append(f"{lwhere}.interval: {e}")
+                r = retailers[rkey]
+                if uses_store(r) and isinstance(r.get("stores", {}), dict):
+                    try:
+                        if resolve_store(expand_env(r), expand_env(l.get("store") or r.get("store"))) is None:
+                            storeless[rkey] = storeless.get(rkey, 0) + 1
+                    except ConfigError as e:
+                        errors.append(f"{lwhere}: {e}")
+                elif l.get("store"):
+                    errors.append(f"{lwhere}: retailer {rkey!r} doesn't use `store:`")
+
+        for rkey, count in storeless.items():
+            name = retailers[rkey].get("name", rkey)
+            self.warnings.append(
+                f"{name}: {count} listing(s) have no store set, and {name} stock is per store. Set your store "
+                f"once with:  python tracker.py add-retailer {rkey} --set store=<name or ID>   "
+                f"(see: python tracker.py stores {rkey})"
+            )
 
         if errors:
             raise ConfigError(f"Problems in {self.path}:\n  - " + "\n  - ".join(errors))

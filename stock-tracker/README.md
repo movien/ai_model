@@ -46,14 +46,29 @@ reloads it automatically. All options are documented in [`config.example.yaml`](
    python tracker.py add-listing "NVIDIA RTX 5090" "https://www.bestbuy.com/site/...6614151.p?skuId=6614151"
    ```
 
-2. **Other stores.** Paste product page URLs. Each one is test-fetched right away, so you see
+2. **Micro Center.** The starter config already tracks four RTX 5090 models there. Micro Center
+   stock is **per store**, so set your store once (by name or 3-digit ID):
+
+   ```bash
+   python tracker.py stores                                  # list store names and IDs
+   python tracker.py add-retailer microcenter --set store=tustin
+   python tracker.py test-url "https://www.microcenter.com/product/690450/..."   # check it reads the page
+   ```
+
+   To watch a second store, add the same URL again with `--store`:
+
+   ```bash
+   python tracker.py add-listing rtx "https://www.microcenter.com/product/690450/..." --store "St. Davids"
+   ```
+
+3. **Other stores.** Paste product page URLs. Each one is test-fetched right away, so you see
    whether it works:
 
    ```bash
    python tracker.py add-listing "NVIDIA RTX 5090" "https://www.example-store.com/rtx-5090-product-page" --label "ASUS Astral"
    ```
 
-3. **Phone alerts (free, no account).** Install the **ntfy** app, subscribe to a hard-to-guess topic
+4. **Phone alerts (free, no account).** Install the **ntfy** app, subscribe to a hard-to-guess topic
    name, and put the same name in `config.yaml`:
 
    ```yaml
@@ -64,7 +79,7 @@ reloads it automatically. All options are documented in [`config.example.yaml`](
 
    Then run `python tracker.py test-notify`.
 
-4. **Run it.**
+5. **Run it.**
 
    ```bash
    python tracker.py check      # check everything once, print a table
@@ -101,6 +116,7 @@ Product names can be shortened when unambiguous (`rtx` matches "NVIDIA RTX 5090"
 | `generic` | `html`     | Any product page (the default when no retailer matches the URL) |
 | `shopify` | `shopify`  | Any Shopify store; reads the store's public product data, including variants |
 | `bestbuy` | `json_api` | Best Buy, through the official Products API (needs `BESTBUY_API_KEY`) |
+| `microcenter` | `html` | Micro Center product pages, with per-store stock (`store:`; see `python tracker.py stores`) |
 
 The retailer for a listing comes from its `retailer:` field. If that isn't set, the URL's domain is
 matched against each retailer's `domains`. If nothing matches, `generic` is used.
@@ -135,6 +151,34 @@ python tracker.py add-retailer shopcom --name "Shop.com" --domain shop.com \
 To find a selector, right-click the price in your browser, choose **Inspect**, and use the element's
 class or id (`.class-name` or `#id`). `--stock-selector` limits the keyword search to one element
 (such as the buy button), which avoids false matches from "related products" sections.
+
+### Retailers with per-store stock (Micro Center)
+
+A retailer can turn a listing's `store:` into URL parameters. The built-in Micro Center does this
+with `?storeid=`:
+
+```yaml
+retailers:
+  microcenter:
+    store: tustin            # default for every Micro Center listing (name or "101")
+products:
+  - name: NVIDIA RTX 5090
+    listings:
+      - url: https://www.microcenter.com/product/690450/...
+      - url: https://www.microcenter.com/product/690450/...
+        store: st-davids     # the same card at a second store (tracked separately)
+```
+
+Write numeric IDs in quotes (`"025"`). Unquoted, YAML reads `025` as an octal number. The store list
+comes from the open-source [streetmerchant](https://github.com/jef/streetmerchant) project, so newer
+stores may be missing; use their 3-digit ID directly. Your own retailers can do the same with
+`url_params: {storeid: "{store}"}` and an optional `stores:` name-to-ID map.
+
+The Micro Center page reading (price in `span#pricing`, stock text in `#pnlInventory`) also follows
+streetmerchant. Micro Center blocked every request from the cloud server this was built on, so it
+hasn't been checked against a live page. Run `test-url` once from your own connection. If price or
+stock comes out wrong, adjust it with
+`python tracker.py add-retailer microcenter --price-selector ... --stock-selector ...`.
 
 ### Any JSON API (`json_api` type)
 
@@ -251,12 +295,13 @@ up within a few seconds.
 | `check [--product P] [--no-alerts]` | Check everything once |
 | `run [--product P] [-q]` | Keep checking and alert on changes |
 | `add-product NAME [URL...] [--target-price] [--max-price] [--interval]` | Track a product |
-| `add-listing PRODUCT [URL] [--retailer] [--sku] [--variant] [--label] [--interval]` | Add where to buy |
+| `add-listing PRODUCT [URL] [--retailer] [--sku] [--variant] [--store] [--label] [--interval]` | Add where to buy |
 | `edit-product NAME [--rename] [--target-price] [--max-price] [--interval] [--disable/--enable]` | Change a product |
 | `remove-product NAME`, `remove-listing PRODUCT N` | Stop tracking |
 | `interval EVERY [--product P [--listing N]]` | Set the refresh rate |
 | `retailers`, `add-retailer KEY ...`, `remove-retailer KEY` | Manage retailers |
-| `test-url URL [selector options]` | Show what the tracker can read from a page |
+| `test-url URL [--store S] [selector options]` | Show what the tracker can read from a page |
+| `stores [RETAILER]` | Store names and IDs for retailers with per-store stock |
 | `history [PRODUCT]`, `export FILE.csv` | Price history |
 | `settings [KEY [VALUE]]` | Show or change global settings |
 | `test-notify` | Send a test alert |

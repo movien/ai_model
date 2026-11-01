@@ -573,5 +573,97 @@ class TestCLI(unittest.TestCase):
         self.assertIn("no product matching", out)
 
 
+class TestMicroCenter(unittest.TestCase):
+    """Store selection and page reading. The fixture copies the markup the built-in selectors
+    expect (#pnlInventory / span#pricing); it is not a live Micro Center page."""
+
+    @classmethod
+    def setUpClass(cls):
+        def mc_page(inventory: str, related: str) -> str:
+            return f"""<html><body><h1>NVIDIA GeForce RTX 5090</h1>
+<span id="pricing" itemprop="price" content="1999.99">$1,999.99</span>
+<div id="pnlInventory"><span class="inventoryCnt">{inventory}</span> at the store</div>
+<div class="related">{related}</div></body></html>"""
+
+        page("/product/690450/rtx-5090?storeid=101", mc_page("5 NEW IN STOCK", "Other card: Sold Out"))
+        page("/product/690450/rtx-5090?storeid=061", mc_page("SOLD OUT", "Another card: 2 in stock"))
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def mc_config(self, store=None, listings=None) -> Config:
+        retailers = {"microcenter": {"domains": ["127.0.0.1"], **({"store": store} if store is not None else {})}}
+        return Config.load(write_config(self.tmp, [{"name": "RTX 5090", "listings": listings or []}], retailers))
+
+    def test_resolve_store(self):
+        from stocktracker.config import BUILTIN_RETAILERS, resolve_store
+
+        mc = BUILTIN_RETAILERS["microcenter"]
+        self.assertEqual(resolve_store(mc, "tustin"), "101")
+        self.assertEqual(resolve_store(mc, "St. Davids"), "061")
+        self.assertEqual(resolve_store(mc, "Mayfield Heights"), "051")
+        self.assertEqual(resolve_store(mc, "201"), "201")  # a store newer than the built-in list
+        self.assertEqual(resolve_store(mc, 101), "101")
+        self.assertEqual(resolve_store(mc, 25), "025")
+        self.assertIsNone(resolve_store(mc, ""))
+        with self.assertRaises(ConfigError):
+            resolve_store(mc, "gotham")
+        with self.assertRaises(ConfigError) as ctx:
+            resolve_store(mc, 21)  # what YAML makes of an unquoted 025
+        self.assertIn("quotes", str(ctx.exception))
+
+    def test_store_in_url_and_stock(self):
+        cfg = self.mc_config(store="tustin", listings=[
+            {"url": BASE + "/product/690450/rtx-5090"},
+            {"url": BASE + "/product/690450/rtx-5090", "store": "st-davids"}])
+        tustin, st_davids = cfg.listings()
+        self.assertEqual((tustin.retailer_key, tustin.store_id, st_davids.store_id), ("microcenter", "101", "061"))
+        self.assertNotEqual(tustin.key, st_davids.key)  # separate price history per store
+
+        r = extract(tustin, fetcher())
+        self.assertEqual((r.price, r.in_stock), (1999.99, True))
+        self.assertIn("pnlInventory", r.stock_source)
+        self.assertTrue(r.link.endswith("?storeid=101"))
+        r = extract(st_davids, fetcher())
+        self.assertEqual((r.price, r.in_stock), (1999.99, False))
+
+    def test_page_url(self):
+        from stocktracker.extract import page_url
+
+        cfg = self.mc_config(listings=[
+            {"retailer": "microcenter", "url": "https://www.microcenter.com/product/1/x?ob=1"},
+            {"retailer": "microcenter", "url": "https://www.microcenter.com/product/1/x?storeid=029", "store": "dallas"}])
+        no_store, dallas = cfg.listings()
+        self.assertEqual(page_url(no_store), "https://www.microcenter.com/product/1/x?ob=1")
+        self.assertEqual(page_url(dallas), "https://www.microcenter.com/product/1/x?storeid=131")
+
+    def test_missing_store_warns(self):
+        cfg = self.mc_config(listings=[{"url": BASE + "/product/690450/rtx-5090"}])
+        self.assertTrue(any("no store set" in w for w in cfg.warnings))
+        self.assertFalse(self.mc_config(store="dallas", listings=[{"url": BASE + "/p"}]).warnings)
+
+    def test_bad_stores_are_config_errors(self):
+        with self.assertRaises(ConfigError):
+            self.mc_config(store="gotham")
+        with self.assertRaises(ConfigError):
+            self.mc_config(listings=[{"url": BASE + "/p", "store": "nowhere"}])
+        with self.assertRaises(ConfigError):  # store on a retailer that has no stores
+            Config.load(write_config(self.tmp, [{"name": "X", "listings": [{"url": "https://a.example/p", "store": "1"}]}]))
+
+    def test_cli_store_option(self):
+        path = write_config(self.tmp, [{"name": "RTX 5090", "listings": []}])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            cli.main(["--config", str(path), "add-retailer", "microcenter", "--set", "store=025"])
+            cli.main(["--config", str(path), "add-listing", "rtx", "https://www.microcenter.com/product/1/x",
+                      "--store", "tustin", "--no-test"])
+            cli.main(["--config", str(path), "add-listing", "rtx", "https://www.microcenter.com/product/1/x", "--no-test"])
+            cli.main(["--config", str(path), "stores"])
+        data = yaml.safe_load(path.read_text())
+        self.assertEqual(data["retailers"]["microcenter"]["store"], "025")  # kept as text, not octal
+        self.assertEqual([l.get("store") for l in data["products"][0]["listings"]], ["tustin", None])
+        self.assertIn("westmont (025)", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

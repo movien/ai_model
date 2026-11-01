@@ -16,7 +16,7 @@ import re
 import string
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from urllib.parse import parse_qs, quote, urlparse, urlunparse
+from urllib.parse import parse_qs, parse_qsl, quote, urlencode, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 
@@ -460,6 +460,29 @@ def _api_url(listing: Listing) -> str:
 # --------------------------------------------------------------------------- entry point
 
 
+def page_url(listing: Listing) -> str:
+    """The listing URL plus the retailer's `url_params` (e.g. Micro Center's ?storeid=101).
+    A parameter is left out when one of its {fields} has no value."""
+    url = str(listing.url)
+    params = listing.retailer.get("url_params") or {}
+    if not params:
+        return url
+    values = {**listing.retailer, **listing.fields, "store": listing.store_id}
+    extra = {}
+    for name, template in params.items():
+        needed = [n for _, n, _, _ in string.Formatter().parse(str(template)) if n]
+        if any(values.get(n) in (None, "") for n in needed):
+            continue
+        extra[str(name)] = str(template).format_map({n: values[n] for n in needed})
+    if not extra:
+        return url
+    p = urlparse(url)
+    query = dict(parse_qsl(p.query, keep_blank_values=True))
+    query.update(extra)
+    return urlunparse(p._replace(query=urlencode(query)))
+
+
+
 def extract(listing: Listing, fetcher: Fetcher) -> Result:
     r = listing.retailer
     rtype = r.get("type", "html")
@@ -469,7 +492,7 @@ def extract(listing: Listing, fetcher: Fetcher) -> Result:
     delay = r.get("min_delay")
 
     if rtype == "html":
-        resp = fetcher.get(listing.url, headers=headers, min_delay=delay)
+        resp = fetcher.get(page_url(listing), headers=headers, min_delay=delay)
         res = parse_html(resp.text, r)
     elif rtype == "shopify":
         endpoint, url_variant = shopify_endpoint(listing.url)
@@ -495,7 +518,7 @@ def extract(listing: Listing, fetcher: Fetcher) -> Result:
             "price_selector / stock_selector for this retailer (see README)"
         )
     res.currency = res.currency or r.get("currency")
-    res.link = res.link or listing.url
+    res.link = res.link or (page_url(listing) if rtype == "html" else listing.url)
     return res
 
 
