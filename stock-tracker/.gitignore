@@ -1,0 +1,8 @@
+# Your personal config can hold API keys and webhook URLs; keep it out of git.
+config.yaml
+config.yaml.bak
+config.yaml.tmp
+*.db
+*.db-journal
+*.csv
+__pycache__/

@@ -1,0 +1,124 @@
+# ---------------------------------------------------------------------------------------------
+# Stock & price tracker: reference config. Every option is shown here with a comment.
+#
+#   python tracker.py init      copies this file to config.yaml, which is the file the tracker
+#                               uses (and the one the CLI edits). Keep this file as a reference.
+#
+# Durations take seconds (300) or units (30s, 2m, 1h).
+# Any text value can use environment variables, e.g. "${BESTBUY_API_KEY}". An unset variable
+# becomes empty, which turns that option (or notification channel) off.
+# ---------------------------------------------------------------------------------------------
+
+settings:
+  default_interval: 5m        # refresh rate for listings that don't set their own
+  min_interval: 1m            # nothing is checked more often than this (hard floor: 30s)
+  per_host_delay: 5s          # minimum gap between two requests to the same website
+  timeout: 20                 # seconds before a request gives up
+  jitter: 0.1                 # vary each wait by up to ±10% so checks don't land in lockstep
+  max_backoff: 1h             # after errors/blocks, waits double up to this long
+  price_drop_min_percent: 1   # ignore price drops smaller than this (in %)
+  currency: USD               # used when a site doesn't say which currency it uses
+  database: tracker.db        # price history (SQLite). Relative paths are next to config.yaml
+  user_agent: "Mozilla/5.0 (compatible; StockTracker/1.0; personal price tracker)"
+
+# A channel is on when its required fields are filled in; empty means off. To keep secrets out of
+# this file, use an environment variable instead, e.g. bot_token: "${TELEGRAM_BOT_TOKEN}".
+# Check your setup with:  python tracker.py test-notify
+notifications:
+  console: true               # print alerts in the terminal
+  bell: true                  # beep on alerts (terminal bell)
+  desktop: false              # OS notification popup (best with: pip install plyer)
+  ntfy:                       # free push alerts on your phone: install the "ntfy" app and
+    topic: ""                 #   subscribe to a hard-to-guess topic, e.g. rtx5090-alerts-k93hf
+    server: https://ntfy.sh
+    token: ""                 # only for protected/self-hosted servers
+  discord:
+    webhook_url: ""           # Server settings > Integrations > Webhooks, or "${DISCORD_WEBHOOK_URL}"
+  telegram:
+    bot_token: ""             # from @BotFather, or "${TELEGRAM_BOT_TOKEN}"
+    chat_id: ""               # or "${TELEGRAM_CHAT_ID}"
+  email:
+    smtp_host: ""             # e.g. smtp.gmail.com (Gmail needs an "app password")
+    port: 587                 # 587 = STARTTLS, 465 = SSL
+    username: ""
+    password: ""              # or "${SMTP_PASSWORD}"
+    from: ""
+    to: ""                    # one address, or several separated by commas
+  webhook:
+    url: ""                   # POSTs JSON to any URL (Home Assistant, Zapier, n8n, ...)
+
+# ---------------------------------------------------------------------------------------------
+# Retailers: how to read a store. Built in (no need to define): generic, shopify, bestbuy.
+#
+#   type: html      any product page. The tracker first reads the page's schema.org product
+#                   data (most shops publish it for Google), then the options below.
+#   type: shopify   any Shopify store; uses its public product data. URLs: .../products/<name>
+#   type: json_api  any JSON API: `url` template plus dotted paths to the fields.
+#
+# Find working options for a new store with:  python tracker.py test-url <product-url>
+# ---------------------------------------------------------------------------------------------
+retailers:
+  # Built-in Best Buy uses the official Products API. Get a free key at
+  # https://developer.bestbuy.com and set the BESTBUY_API_KEY environment variable
+  # (or replace the value below with the key itself).
+  bestbuy:
+    api_key: "${BESTBUY_API_KEY}"
+
+  # Example custom HTML retailer. Every field is optional except `type`.
+  newegg:
+    name: Newegg
+    type: html
+    domains: [newegg.com]               # URLs on these domains use this retailer automatically
+    # price_selector: ".price-current"  # CSS selector for the price (overrides structured data)
+    # price_regex: '"price":\s*"?([\d.]+)'  # or a regex with one capture group
+    # stock_selector: ".product-buy"    # element whose text is checked for the words below
+    in_stock_text: ["Add to cart"]      # words that mean "you can buy it"
+    out_of_stock_text: ["Out of stock", "Sold out", "Auto Notify"]   # checked first
+    # structured_data: false            # ignore the page's schema.org data
+    # keyword_fallback: false           # don't search the whole page for the words above
+    # currency: USD
+    # min_delay: 10                     # seconds between requests to this site
+    # user_agent: "..."                 # per-site User-Agent
+    # headers: {Accept-Language: en-US}
+
+  # Example JSON API retailer (any API that returns JSON):
+  # mystore:
+  #   name: My Store
+  #   type: json_api
+  #   url: "https://api.mystore.com/v1/items/{sku}?key={api_key}"   # {fields} come from the
+  #   api_key: "${MYSTORE_API_KEY}"                                  #   retailer or the listing
+  #   price_path: data.price             # dotted path; list items by number: items.0.price
+  #   in_stock_path: data.available      # true/false, a quantity, or text like "InStock"
+  #   # in_stock_values: ["available", "limited"]   # text values that mean in stock
+  #   title_path: data.name
+  #   link_path: data.url
+  #   sku_pattern: '/item/(\d+)'         # pull the sku out of a pasted product URL
+  #   headers: {X-Api-Key: "${MYSTORE_API_KEY}"}
+
+# ---------------------------------------------------------------------------------------------
+# Products: what to watch. Each product has one or more listings (where to buy it).
+#
+#   target_price   alert when a listing is at or below this price
+#   max_price      treat in-stock offers above this as "not worth it" (scalper prices) and don't
+#                  alert on them
+#   interval       refresh rate for this product (a listing can set its own `interval` too)
+#   enabled        false pauses the product
+#
+# Listing fields: url, retailer (default: picked by the URL's domain, else generic), sku (API
+# retailers), variant (Shopify variant id or name), label (a note), interval, enabled.
+# ---------------------------------------------------------------------------------------------
+products:
+  - name: NVIDIA RTX 5090
+    target_price: 2000                  # MSRP of the Founders Edition; set your own budget
+    # max_price: 3000                   # uncomment to skip alerts for listings priced above this
+    interval: 2m
+    listings:
+      - retailer: bestbuy
+        sku: "6614151"                  # the skuId=... number in the Best Buy product URL
+        label: Founders Edition
+      # Paste product page URLs from any store:
+      # - url: https://www.newegg.com/p/N82E168...
+      # - url: https://www.bhphotovideo.com/c/product/...
+      # - url: https://some-store.com/products/rtx-5090
+      #   retailer: shopify
+      #   variant: "OC Edition"
